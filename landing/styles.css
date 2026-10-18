@@ -99,6 +99,9 @@ main:focus { outline: none; }
 .dot-agent { background: var(--agent-solid); }
 .dot-you { background: var(--you-solid); }
 .dot-people { background: var(--people-solid); }
+/* Цветная точка не отрывается от своей строки: каждый помощник с новой строки, точка склеена с первым словом */
+.who-line { display: block; }
+.nowrap { white-space: nowrap; }
 .tag { display: inline-flex; align-items: center; gap: .4em; font-size: .8125rem; font-weight: 600; padding: .3em .7em; border-radius: 999px; }
 .tag::before { content: ""; inline-size: .5em; block-size: .5em; border-radius: 50%; background: currentColor; }
 .tag-agent { color: var(--agent); background: var(--agent-soft); }
