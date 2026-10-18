@@ -1,0 +1,42 @@
+# Secrets and access keys
+keys.txt
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node / frontend builds
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# Local databases and logs
+key-server/data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+var/
+
+# Source materials archive (kept outside git)
+*.zip

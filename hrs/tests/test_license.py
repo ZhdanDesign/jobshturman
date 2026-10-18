@@ -1,0 +1,234 @@
+"""S4 from the candidate's side: hrs login and sync against the real key server, run in-process.
+
+An expired or revoked key switches the methodology off for the agent, the candidate's data stays.
+"""
+import asyncio
+import json
+import re
+import zipfile
+from datetime import timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+from hrs_keys import bundle
+from hrs_keys import cli as keys_cli
+from hrs_keys.app import create_app
+from hrs_keys.service import Settings, generate_signing_key, iso, now
+from hrshturman_core import DomainError
+from mcp import Client, MCPError
+
+from hrs_cli import license, main
+from hrs_cli.server import build
+
+ADMIN = {"Authorization": "Bearer admin"}
+STAGE_00 = ("---\nname: stage-00\ndescription: этап 0\n---\n# Диагностика\n\nСначала выясни, что болит у кандидата сейчас.\n\n"
+            "Потом сверь желаемую роль с опытом и рынком.\n\n- Пункт со списком трудностей\n\n"
+            "```\nhrs paths\n```\n")
+ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\u2062\ufeff]")
+
+
+def plain(text: str) -> str:
+    return ZERO_WIDTH.sub("", text)
+
+
+@pytest.fixture
+def keys(tmp_path, monkeypatch):
+    monkeypatch.setenv("HRSHTURMAN_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("HRSHTURMAN_WORKSPACE", raising=False)
+    settings = Settings(data=tmp_path / "server", secret=b"k" * 40, admin_token="admin",
+                        signing_key=tmp_path / "server" / "signing.pem", renew_url="https://example.test/renew")
+    monkeypatch.setenv("HRS_BUNDLE_PUBKEYS", generate_signing_key(settings.signing_key))
+    client = TestClient(create_app(settings))
+    lib = tmp_path / "library"
+    (lib / "skills" / "stage-07-master-cv" / "references").mkdir(parents=True)
+    (lib / "skills" / "stage-07-master-cv" / "SKILL.md").write_text("# 07", encoding="utf-8")
+    (lib / "skills" / "stage-07-master-cv" / "references" / "procedure.md").write_text("Мастер-резюме", encoding="utf-8")
+    (lib / "skills" / "stage-07-master-cv" / "references" / "acceptance.md").write_text("для нас", encoding="utf-8")
+    (lib / "skills" / "stage-00-diagnostic" / "references").mkdir(parents=True)
+    (lib / "skills" / "stage-00-diagnostic" / "references" / "procedure.md").write_text(STAGE_00, encoding="utf-8")
+    monkeypatch.setenv("HRS_KEYS_DATA", str(settings.data))
+    monkeypatch.setenv("HRS_KEYS_SECRET", settings.secret.decode())
+    (lib / "library_manifest.json").write_text(json.dumps({"version": "0.4.0"}), encoding="utf-8")
+    _, data = bundle.build(lib, version="0.4.0.t1")
+    client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, headers=ADMIN).raise_for_status()
+    return client
+
+
+def issue(client, **body):
+    r = client.post("/v1/admin/keys", json={"tariff_id": "self", **body}, headers=ADMIN)
+    r.raise_for_status()
+    return r.json()
+
+
+def stage_text(settings=None):
+    async def go():
+        async with Client(build(settings)) as c:
+            status = json.loads((await c.call_tool("license_status", {})).content[0].text)
+            try:
+                text = (await c.read_resource("hrshturman://procedure/7")).contents[0].text
+            except MCPError as exc:  # the agent gets the reason, not a stack trace
+                text = f"error: {exc}"
+            return status, text
+    return asyncio.run(go())
+
+
+def test_login_downloads_a_signed_bundle_and_the_agent_reads_one_stage(keys):
+    key = issue(keys)
+    out = license.login(key["key"], http=keys)
+    assert (out["state"], out["methodology"], out["tariff"], out["bundle_version"]) == (
+        "active", True, "Самостоятельно", "0.4.0.t1")
+    assert license.bundle_file().is_file()
+    assert not (license.bundle_file().parent / "skills").exists()  # never unpacked
+    assert (license.state_file().stat().st_mode & 0o777) == 0o600
+    status, text = stage_text()
+    assert status["state"] == "active" and plain(text) == "Мастер-резюме" and text != "Мастер-резюме"
+
+
+def test_the_cache_on_disk_is_only_ciphertext(keys, tmp_path):
+    license.login(issue(keys)["key"], http=keys)
+    assert "Мастер-резюме" in plain(license.BundleLibrary().read("skills/stage-07-master-cv/references/procedure.md"))
+    files = [p for p in (tmp_path / "home").rglob("*") if p.is_file()]
+    assert license.bundle_file() in files
+    for path in files:
+        raw = path.read_bytes()
+        for phrase in ("Мастер-резюме", "Сначала выясни", "stage-07-master-cv", "bundle.json"):
+            assert phrase.encode() not in raw, (path, phrase)
+        assert not zipfile.is_zipfile(path), path
+
+
+def test_a_wrong_key_does_not_decrypt_the_cache(keys):
+    license.login(issue(keys)["key"], http=keys)
+    state = license.load()
+    blob = license.bundle_file().read_bytes()
+    for wrong in ({**state, "key": "HRS-AAAA-BBBB-CCCC-DDDD-EEEE"}, {**state, "install_id": "another-computer"}):
+        with pytest.raises(DomainError) as exc:
+            license.decrypt(blob, wrong)
+        assert exc.value.code == "bad_bundle"
+    license.save({**state, "key": "HRS-AAAA-BBBB-CCCC-DDDD-EEEE"})
+    with pytest.raises(DomainError) as exc:
+        license.BundleLibrary().read("skills/stage-07-master-cv/references/procedure.md")
+    assert exc.value.code == "bad_bundle"
+
+
+def test_sync_replaces_an_old_open_zip(keys):
+    old = license.legacy_bundle_file()
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"PK old open bundle")
+    license.login(issue(keys)["key"], http=keys)
+    assert not old.exists() and license.bundle_file().is_file()
+
+
+def test_a_copied_paragraph_names_its_key(keys, tmp_path, capsys):
+    first, second = issue(keys), issue(keys)
+    license.login(second["key"], http=keys)
+    text = license.BundleLibrary().read("skills/stage-00-diagnostic/references/procedure.md")
+    assert plain(text) == STAGE_00
+    assert "hrs paths\n" in text and text.startswith("---\nname: stage-00\n")  # code and front matter stay clean
+    paragraphs = [p for p in text.split("---\n", 2)[2].split("\n\n") if "```" not in p]
+    assert len(paragraphs) == 4
+    for paragraph in paragraphs:
+        copied = tmp_path / "copied.txt"
+        copied.write_text(f"Нашёл в сети: {paragraph}", encoding="utf-8")
+        capsys.readouterr()
+        assert keys_cli.main(["watermark", "decode", str(copied)]) == 0
+        found = json.loads(capsys.readouterr().out)
+        assert [k["id"] for k in found["keys"]] == [second["id"]] and first["id"] not in json.dumps(found)
+    copied.write_text(plain(text), encoding="utf-8")
+    assert keys_cli.main(["watermark", "decode", str(copied)]) == 1
+
+
+def test_the_agent_gets_one_stage_at_a_time(keys, capsys):
+    license.login(issue(keys)["key"], http=keys)
+
+    async def go():
+        async with Client(build()) as c:
+            tools = {t.name for t in (await c.list_tools()).tools}
+            zero = (await c.call_tool("stage_procedure", {"stage_id": 0})).content[0].text
+            seven = (await c.call_tool("stage_procedure", {"stage_id": 7})).content[0].text
+            return tools, zero, seven
+    tools, zero, seven = asyncio.run(go())
+    assert "stage_procedure" in tools
+    assert not {t for t in tools if re.search("bundle|library|methodology_(all|export|read)", t)}
+    assert plain(zero) == STAGE_00 and "Мастер-резюме" not in zero
+    assert plain(seven) == "Мастер-резюме" and "Сначала выясни" not in seven
+    assert main.main(["stage", "0"]) == 0
+    out = capsys.readouterr().out
+    assert "Сначала выясни" in plain(out) and "Мастер-резюме" not in plain(out) and plain(out) != out
+
+
+def test_expired_key_switches_the_methodology_off_and_renewal_brings_it_back(keys):
+    key = issue(keys, expires_at=iso(now() + timedelta(hours=10)))
+    out = license.login(key["key"], http=keys)
+    assert out["state"] == "expiring" and "https://example.test/renew" in out["warning"]
+
+    keys.post(f"/v1/admin/keys/{key['id']}/extend", json={"until": iso(now() - timedelta(minutes=1))},
+              headers=ADMIN).raise_for_status()
+    out = license.refresh(force=True, http=keys)
+    assert (out["state"], out["methodology"]) == ("expired", False)
+    with pytest.raises(DomainError) as exc:
+        license.BundleLibrary().read("skills/stage-07-master-cv/references/procedure.md")
+    assert exc.value.code == "license_expired" and "https://example.test/renew" in str(exc.value)
+    status, text = stage_text()
+    assert status["state"] == "expired" and text.startswith("error: license_expired") and "example.test/renew" in text
+
+    keys.post(f"/v1/admin/keys/{key['id']}/extend", json={"months": 3}, headers=ADMIN).raise_for_status()
+    out = license.refresh(force=True, http=keys)
+    assert (out["state"], out["methodology"]) == ("active", True)
+
+
+def test_agent_enters_the_key_through_the_mcp_tool(keys, monkeypatch):
+    key = issue(keys)
+    real_login = license.login
+    monkeypatch.setattr(license, "login", lambda k: real_login(k, http=keys))
+
+    async def go():
+        async with Client(build()) as c:
+            before = json.loads((await c.call_tool("license_status", {})).content[0].text)
+            after = json.loads((await c.call_tool("license_login", {"key": key["key"]})).content[0].text)
+            text = (await c.read_resource("hrshturman://procedure/7")).contents[0].text
+            return before, after, text
+    before, after, text = asyncio.run(go())
+    assert before["state"] == "none" and after["state"] == "active" and plain(text) == "Мастер-резюме"
+
+
+def test_revoked_key_cannot_sync(keys):
+    key = issue(keys)
+    license.login(key["key"], http=keys)
+    keys.post(f"/v1/admin/keys/{key['id']}/revoke", json={"reason": "violation"}, headers=ADMIN).raise_for_status()
+    with pytest.raises(DomainError) as exc:
+        license.sync(http=keys)
+    assert exc.value.code == "key_revoked"
+    assert license.view()["state"] == "revoked" and license.view()["methodology"] is False
+
+
+def test_tampered_bundle_is_refused(keys, monkeypatch):
+    key = issue(keys)
+    license.login(key["key"], http=keys)
+    path = license.bundle_file()
+    path.write_bytes(path.read_bytes() + b"x")
+    with pytest.raises(DomainError) as exc:
+        license.BundleLibrary().names()
+    assert exc.value.code == "bad_bundle"
+    monkeypatch.setenv("HRS_BUNDLE_PUBKEYS", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    with pytest.raises(DomainError) as exc:
+        license.sync(http=keys)
+    assert exc.value.code == "bad_signature"
+
+
+def test_offline_grace_then_off(keys):
+    key = issue(keys)
+    license.login(key["key"], http=keys)
+    state = license.load()
+    state["checked_at"] = iso(now() - timedelta(days=3))
+    license.save(state)
+    assert license.view()["methodology"] is True  # 3 days offline is fine
+    state["checked_at"] = iso(now() - timedelta(days=8))
+    license.save(state)
+    assert (license.view()["state"], license.view()["methodology"]) == ("offline", False)
+
+
+def test_cli_without_a_key(keys, capsys):
+    assert main.main(["license"]) == 1
+    assert json.loads(capsys.readouterr().out)["state"] == "none"
+    assert main.main(["login", "HRS-AAAA-BBBB-CCCC-DDDD-EEEE", "--server", "http://127.0.0.1:9"]) == 1
+    assert json.loads(capsys.readouterr().out)["error"] in ("server_error", "connection_error", "invalid_key")

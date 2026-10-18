@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>HR Штурман — помощь в поиске работы от Алексея Штурбина</title>
+    <meta name="description" content="Агент в Claude Code или Codex ведёт поиск работы по методике из 26 этапов: вакансии, отклики, учёт ответов и подготовка к встречам. Данные остаются на вашем компьютере. Помощь Алексея и карьерного консультанта — в старших пакетах.">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="HR Штурман">
+    <meta property="og:title" content="HR Штурман — помощь в поиске работы от Алексея Штурбина">
+    <meta property="og:description" content="Агент ведёт поиск работы по методике из 26 этапов. Данные остаются на вашем компьютере, решения принимаете вы.">
+    <meta property="og:url" content="https://tools.owai.ru/hrshturman/">
+    <link rel="canonical" href="https://tools.owai.ru/hrshturman/">
+    <link rel="stylesheet" href="tokens.css">
+    <link rel="stylesheet" href="styles.css">
+    <script>document.documentElement.classList.add("js");</script>
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Перейти к содержимому</a>
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="HR Штурман, в начало страницы">HR Штурман</a>
+      <nav aria-label="Разделы страницы">
+        <a href="#pains">Трудности</a>
+        <a href="#agent">Агент</a>
+        <a href="#tariffs">Тарифы</a>
+        <a href="#faq">Вопросы</a>
+      </nav>
+      <a class="button small" href="https://t.me/Aleksei_Shturbin" data-link="author">Написать Алексею</a>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-text">
+          <h1 id="hero-title">Поиск работы по маршруту, а&nbsp;не&nbsp;наугад</h1>
+          <p class="lead">Не знаете, куда двигаться дальше? Откликаетесь, но вас редко зовут на встречи? Или вакансии есть, а сил на поиск уже не хватает? HR Штурман — агент в Claude Code или Codex, который ведёт поиск по методике из 26 этапов, и люди, которые помогают там, где вам сложно.</p>
+          <ul class="facts">
+            <li><strong>Данные на вашем компьютере.</strong> Резюме, факты, вакансии и отклики хранятся локально.</li>
+            <li><strong>Модель — ваша.</strong> Агент работает в вашем Claude Code или Codex, подписка на ИИ оплачивается отдельно.</li>
+            <li><strong>Решаете вы.</strong> Агент ничего не отправляет работодателю без вашего согласия.</li>
+          </ul>
+          <div class="actions">
+            <a class="button primary" href="#pains">Где у вас трудности</a>
+            <a class="button" href="#tariffs">Тарифы</a>
+          </div>
+        </div>
+        <figure class="hero-route">
+        <svg class="route" viewBox="0 0 560 480" role="img" aria-labelledby="route-title">
+        <title id="route-title">Маршрут из 26 этапов в четырёх группах: подготовка, вакансии, отклики, ответы и встречи</title>
+        <path class="route-line" d="M48 72 H512 A60 60 0 0 1 512 192 H48 A60 60 0 0 0 48 312 H512 A60 60 0 0 1 512 432 H48" pathLength="100"/>
+        <path class="route-done" d="M48 72 H512 A60 60 0 0 1 512 192 H48 A60 60 0 0 0 48 312 H512 A60 60 0 0 1 512 432 H48" pathLength="100"/>
+        <text class="route-phase" x="48" y="38" text-anchor="start">Подготовка<tspan class="route-phase-sub" dx="8">этапы 0–12</tspan></text>
+        <text class="route-phase" x="512" y="158" text-anchor="end">Вакансии<tspan class="route-phase-sub" dx="8">этапы 13–16</tspan></text>
+        <text class="route-phase" x="48" y="278" text-anchor="start">Отклики<tspan class="route-phase-sub" dx="8">этапы 17–20</tspan></text>
+        <text class="route-phase" x="512" y="398" text-anchor="end">Ответы и встречи<tspan class="route-phase-sub" dx="8">этапы 21–25</tspan></text>
+        <g class="station" style="--at:0.0000"><title>0. Начальная диагностика</title><circle cx="48.0" cy="72" r="11"/><text x="48.0" y="76" text-anchor="middle">0</text></g>
+        <g class="station" style="--at:0.0160"><title>1. Материалы о кандидате</title><circle cx="86.7" cy="72" r="11"/><text x="86.7" y="76" text-anchor="middle">1</text></g>
+        <g class="station" style="--at:0.0319"><title>2. Целевые компании и позиции</title><circle cx="125.3" cy="72" r="11"/><text x="125.3" y="76" text-anchor="middle">2</text></g>
+        <g class="station" style="--at:0.0479"><title>3. Опыт и сильные стороны</title><circle cx="164.0" cy="72" r="11"/><text x="164.0" y="76" text-anchor="middle">3</text></g>
+        <g class="station" style="--at:0.0639"><title>4. SWOT против реальных вакансий</title><circle cx="202.7" cy="72" r="11"/><text x="202.7" y="76" text-anchor="middle">4</text></g>
+        <g class="station" style="--at:0.0798"><title>5. Матрица компетенций</title><circle cx="241.3" cy="72" r="11"/><text x="241.3" y="76" text-anchor="middle">5</text></g>
+        <g class="station" style="--at:0.0958"><title>6. План на 30 дней</title><circle cx="280.0" cy="72" r="11"/><text x="280.0" y="76" text-anchor="middle">6</text></g>
+        <g class="station" style="--at:0.1118"><title>7. Мастер-резюме</title><circle cx="318.7" cy="72" r="11"/><text x="318.7" y="76" text-anchor="middle">7</text></g>
+        <g class="station" style="--at:0.1277"><title>8. Профили площадок</title><circle cx="357.3" cy="72" r="11"/><text x="357.3" y="76" text-anchor="middle">8</text></g>
+        <g class="station" style="--at:0.1437"><title>9. Письмо-основа</title><circle cx="396.0" cy="72" r="11"/><text x="396.0" y="76" text-anchor="middle">9</text></g>
+        <g class="station" style="--at:0.1597"><title>10. Портфолио кейсов</title><circle cx="434.7" cy="72" r="11"/><text x="434.7" y="76" text-anchor="middle">10</text></g>
+        <g class="station" style="--at:0.1756"><title>11. Библиотека фактов</title><circle cx="473.3" cy="72" r="11"/><text x="473.3" y="76" text-anchor="middle">11</text></g>
+        <g class="station" style="--at:0.1916"><title>12. Проверка позиционирования</title><circle cx="512.0" cy="72" r="11"/><text x="512.0" y="76" text-anchor="middle">12</text></g>
+        <g class="station" style="--at:0.2695"><title>13. Каналы: hh.ru, Telegram, LinkedIn</title><circle cx="512.0" cy="192" r="11"/><text x="512.0" y="196" text-anchor="middle">13</text></g>
+        <g class="station" style="--at:0.3333"><title>14. Регулярный сбор вакансий</title><circle cx="357.3" cy="192" r="11"/><text x="357.3" y="196" text-anchor="middle">14</text></g>
+        <g class="station" style="--at:0.3972"><title>15. Оценка вакансий 1–5</title><circle cx="202.7" cy="192" r="11"/><text x="202.7" y="196" text-anchor="middle">15</text></g>
+        <g class="station" style="--at:0.4611"><title>16. Решение кандидата</title><circle cx="48.0" cy="192" r="11"/><text x="48.0" y="196" text-anchor="middle">16</text></g>
+        <g class="station" style="--at:0.5389"><title>17. Резюме и письмо под вакансию</title><circle cx="48.0" cy="312" r="11"/><text x="48.0" y="316" text-anchor="middle">17</text></g>
+        <g class="station" style="--at:0.6028"><title>18. Отправка по правилам канала</title><circle cx="202.7" cy="312" r="11"/><text x="202.7" y="316" text-anchor="middle">18</text></g>
+        <g class="station" style="--at:0.6667"><title>19. Анкеты работодателя</title><circle cx="357.3" cy="312" r="11"/><text x="357.3" y="316" text-anchor="middle">19</text></g>
+        <g class="station" style="--at:0.7305"><title>20. Тестовые задания</title><circle cx="512.0" cy="312" r="11"/><text x="512.0" y="316" text-anchor="middle">20</text></g>
+        <g class="station" style="--at:0.8084"><title>21. Дежурство по каналам</title><circle cx="512.0" cy="432" r="11"/><text x="512.0" y="436" text-anchor="middle">21</text></g>
+        <g class="station" style="--at:0.8563"><title>22. Реестр и воронка</title><circle cx="396.0" cy="432" r="11"/><text x="396.0" y="436" text-anchor="middle">22</text></g>
+        <g class="station" style="--at:0.9042"><title>23. Сигнал кандидату</title><circle cx="280.0" cy="432" r="11"/><text x="280.0" y="436" text-anchor="middle">23</text></g>
+        <g class="station" style="--at:0.9521"><title>24. Подготовка к встрече</title><circle cx="164.0" cy="432" r="11"/><text x="164.0" y="436" text-anchor="middle">24</text></g>
+        <g class="station" style="--at:1.0000"><title>25. Разбор после встречи</title><circle cx="48.0" cy="432" r="11"/><text x="48.0" y="436" text-anchor="middle">25</text></g>
+        <g class="marker" aria-hidden="true" transform="translate(48 432)"><circle r="16"/><animateMotion id="course" dur="7s" begin="indefinite" fill="freeze" calcMode="linear" path="M48 72 H512 A60 60 0 0 1 512 192 H48 A60 60 0 0 0 48 312 H512 A60 60 0 0 1 512 432 H48"/></g>
+        </svg>
+          <figcaption class="route-caption">Маршрут: 26 этапов в четырёх группах. <a href="#route">Что входит в каждую</a></figcaption>
+        </figure>
+      </section>
+
+      <section id="pains" aria-labelledby="pains-title">
+        <div class="section-head">
+          <h2 id="pains-title">Где у вас наибольшие трудности?</h2>
+          <p>Выберите два-три пункта и назовите их, когда будете писать: так быстрее поймём, какая помощь нужна.</p>
+        </div>
+        <ol class="pains">
+          <li>
+            <h3>Не знаю, какую работу искать</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант</dd>
+              <dt>Что делаем</dt><dd>Обсудим, чем вы хотите заниматься и какие условия вам подходят</dd>
+              <dt>Что получаете</dt><dd>Выберете направления поиска</dd>
+              <dt>Формат</dt><dd>С сопровождением или с группой экспертов</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Не понимаю, на какие должности могу претендовать</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант; агент помогает изучить вакансии</dd>
+              <dt>Что делаем</dt><dd>Сравним ваш опыт с требованиями работодателей</dd>
+              <dt>Что получаете</dt><dd>Поймёте, где ваш опыт востребован и чего не хватает</dd>
+              <dt>Формат</dt><dd>С сопровождением или с группой экспертов</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Не умею рассказать о себе так, чтобы заинтересовать работодателя</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант; агент помогает с текстами</dd>
+              <dt>Что делаем</dt><dd>Выберем важные достижения и проверим резюме и профили</dd>
+              <dt>Что получаете</dt><dd>Сможете объяснить, какую пользу приносите</dd>
+              <dt>Формат</dt><dd>С сопровождением или с группой экспертов</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Не знаю, как выделиться среди других кандидатов</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант; при необходимости другой специалист</dd>
+              <dt>Что делаем</dt><dd>Разберём ваши сильные стороны и подберём примеры из опыта</dd>
+              <dt>Что получаете</dt><dd>Появятся аргументы для резюме и разговора</dd>
+              <dt>Формат</dt><dd>Состав помощи выбираем по вашему запросу</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Трачу много времени на вакансии и отклики, а продвижения не вижу</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Агент; Алексей помогает наладить работу</dd>
+              <dt>Что делаем</dt><dd>Настроим сбор вакансий, подготовку откликов и учёт ответов</dd>
+              <dt>Что получаете</dt><dd>Будете видеть подходящие вакансии и следующие шаги</dd>
+              <dt>Формат</dt><dd>Любой пакет; с помощью — в двух старших</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>На собеседовании теряюсь или не могу убедительно ответить</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант; с агентом можно тренироваться самому</dd>
+              <dt>Что делаем</dt><dd>Потренируем ответы и разберём сложные вопросы</dd>
+              <dt>Что получаете</dt><dd>Подготовитесь к конкретной встрече</dd>
+              <dt>Формат</dt><dd>Самостоятельная тренировка или работа с консультантом</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Не знаю, сколько просить и как обсуждать деньги</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Карьерный консультант</dd>
+              <dt>Что делаем</dt><dd>Обсудим ожидания по доходу, условия предложения и аргументы</dd>
+              <dt>Что получаете</dt><dd>Подготовитесь к переговорам о зарплате</dd>
+              <dt>Формат</dt><dd>С сопровождением или с группой экспертов</dd>
+            </dl>
+          </li>
+          <li>
+            <h3>Поиск выматывает, всё труднее продолжать</h3>
+            <dl>
+              <dt>Кто помогает</dt><dd>Психолог, если нужна профессиональная поддержка; агент помогает с рутиной</dd>
+              <dt>Что делаем</dt><dd>Обсудим, какая поддержка вам нужна и что можно упростить</dd>
+              <dt>Что получаете</dt><dd>Сможете выбрать специалиста и посильный ритм</dd>
+              <dt>Формат</dt><dd>Участие психолога согласуем отдельно</dd>
+            </dl>
+          </li>
+        </ol>
+      </section>
+
+      <section id="agent" aria-labelledby="agent-title">
+        <div class="section-head">
+          <h2 id="agent-title">Агент помогает вести поиск каждый день</h2>
+          <p>Это помощник на вашем компьютере. Он работает в Claude Code или Codex на macOS и Windows.</p>
+        </div>
+        <ul class="agent-cards">
+          <li><h3>Находит подходящие вакансии</h3><p>Собирает вакансии из доступных вам источников, сравнивает с вашими пожеланиями и объясняет, какие стоит рассмотреть.</p></li>
+          <li><h3>Помогает подготовить отклик</h3><p>Готовит резюме и письмо под вакансию из вашего опыта. Вы проверяете факты и выбираете, что отправить.</p></li>
+          <li><h3>Ведёт учёт поиска</h3><p>Помнит, куда вы откликнулись, кто ответил и какой следующий шаг. Переписка и приглашения не теряются.</p></li>
+          <li><h3>Готовит к встрече</h3><p>Собирает сведения о компании и вероятные вопросы, тренирует ответы и помогает разобрать итоги.</p></li>
+        </ul>
+        <p class="note">Меньше времени на повторяющиеся действия. Встречи, знакомства и решение о работе остаются за вами.</p>
+      </section>
+
+      <section class="how" id="how" aria-labelledby="how-title">
+        <div class="section-head">
+          <h2 id="how-title">Как начать</h2>
+          <p>Три шага, и агент знает, с какого этапа начать.</p>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <div class="step-text">
+              <span class="step-num" aria-hidden="true">1</span>
+              <h3>Установите навык</h3>
+              <p>Одна команда в Claude Code. Установщик подключит HR Штурман и к Codex, если он у вас есть.</p>
+            </div>
+            <div class="window terminal" aria-hidden="true">
+              <div class="window-bar"><span></span><span></span><span></span><em>Терминал</em></div>
+              <div class="window-body">
+                <p class="ln cmd" style="--i:0"><span class="prompt">$</span><span class="type">claude plugin install hrshturman@hrshturman</span></p>
+                <p class="ln muted" style="--i:2">Установка навыка hrshturman…</p>
+                <p class="ln" style="--i:3"><span class="ok">✓</span> Claude Code подключён</p>
+                <p class="ln" style="--i:4"><span class="ok">✓</span> Codex подключён</p>
+              </div>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-text">
+              <span class="step-num" aria-hidden="true">2</span>
+              <h3>Введите ключ</h3>
+              <p>Ключ приходит после оплаты. Агент активирует его на этом компьютере и скачивает методику.</p>
+            </div>
+            <div class="window chat" aria-hidden="true">
+              <div class="window-bar"><span></span><span></span><span></span><em>Claude Code</em></div>
+              <div class="window-body">
+                <p class="ln msg you" style="--i:0">Мой ключ HRS-7K2M-····-····</p>
+                <p class="ln msg tool" style="--i:1">license_login</p>
+                <p class="ln msg agent" style="--i:2">Ключ активен до 12 января 2027, тариф «Самостоятельно». Методика загружена.</p>
+              </div>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-text">
+              <span class="step-num" aria-hidden="true">3</span>
+              <h3>Идите по этапам</h3>
+              <p>Агент начинает с диагностики и ведёт дальше. Резюме строится только на подтверждённых вами фактах.</p>
+            </div>
+            <div class="window chat" aria-hidden="true">
+              <div class="window-bar"><span></span><span></span><span></span><em>Codex</em></div>
+              <div class="window-body">
+                <p class="ln msg you" style="--i:0">Покажи статус поиска работы</p>
+                <p class="ln msg agent" style="--i:1">Этап 7, основное резюме. Подтверждено 18 фактов, 3 ждут вашего ответа.</p>
+                <div class="ln progress" style="--i:2"><span style="--p:.3"></span></div>
+                <p class="ln msg agent" style="--i:3">Начнём с трёх фактов про проект в логистике?</p>
+              </div>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section id="route" aria-labelledby="route-title-2">
+        <div class="section-head">
+          <h2 id="route-title-2">26 этапов в четырёх группах</h2>
+          <p>Агент идёт по ним по порядку и подсказывает, что делать дальше.</p>
+        </div>
+        <div class="groups">
+          <div><h3>Подготовка <span class="muted">0–12</span></h3><p>Диагностика, материалы об опыте, желаемые должности и компании, сильные стороны, сравнение с требованиями, навыки, пробелы и план, основное резюме, профили на сайтах, основа письма, примеры проектов, проверенные факты, проверка на реальных вакансиях.</p></div>
+          <div><h3>Вакансии <span class="muted">13–16</span></h3><p>Источники, регулярный сбор, отбор, ваше решение, куда откликаться.</p></div>
+          <div><h3>Отклики <span class="muted">17–20</span></h3><p>Резюме и письмо под вакансию, отправка по вашим правилам, анкеты работодателя, решение о тестовом задании.</p></div>
+          <div><h3>Ответы и встречи <span class="muted">21–25</span></h3><p>Следить за ответами и статусами, позвать вас, когда нужен ваш ответ, подготовка к встрече и её разбор.</p></div>
+        </div>
+      </section>
+
+      <section id="rules" aria-labelledby="rules-title">
+        <div class="section-head">
+          <h2 id="rules-title">Как устроена работа</h2>
+        </div>
+        <div class="rules">
+          <div>
+            <h3>Где ищем</h3>
+            <ul>
+              <li><strong>hh.ru</strong> — вакансии, отклики, анкеты, чаты</li>
+              <li><strong>Telegram</strong> — каналы с вакансиями, список источников в пакете</li>
+              <li><strong>Почта</strong> — ответы и приглашения</li>
+              <li><strong>LinkedIn</strong> — только чтение</li>
+            </ul>
+            <p class="small muted">Подключения зависят от ваших аккаунтов и доступности сайтов.</p>
+          </div>
+          <div>
+            <h3>Важные решения принимаете вы</h3>
+            <ul>
+              <li>Вы выбираете вакансии, говорите с работодателем и решаете про деньги.</li>
+              <li>Тексты строятся на ваших проверенных фактах. Агент не добавляет опыт, которого не было, и спрашивает, если сведений не хватает.</li>
+              <li>Правила отправки согласуете сами, первые отклики проверяете.</li>
+              <li>Логины, пароли и коды остаются у вас.</li>
+              <li>Найм гарантировать нельзя.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Что подготовить</h3>
+            <ul>
+              <li>Компьютер на macOS или Windows и Claude Code или Codex; подписка на ИИ оплачивается отдельно.</li>
+              <li>Ваши материалы: резюме, даты, должности, цифры — и время на работу с агентом.</li>
+              <li>Установщик и ключ мы дадим после оплаты.</li>
+              <li>Резюме, письма и отклики хранятся в рабочей папке на вашем компьютере.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="story" aria-labelledby="story-title">
+        <div class="section-head">
+          <h2 id="story-title">Алексей собрал агента во время собственного поиска работы</h2>
+          <p>С 3 по 23 сентября 2026 года он искал руководящую работу и постепенно передал рутину агенту. Так появился HR Штурман.</p>
+        </div>
+        <div class="author">
+          <p>Алексей Штурбин — управляющий и коммерческий директор. 20 лет в международных компаниях (JTI, Nestlé, Philip Morris International): 36 рынков, команды от 300 человек, бюджеты до $100 млн. Сам строит решения на ИИ-агентах.</p>
+          <p class="author-links"><a href="https://zinin-shturbin.com/about/aleksei-shturbin/">Подробнее об Алексее</a><a href="https://www.linkedin.com/in/alexey-shturbin">LinkedIn</a></p>
+        </div>
+        <dl class="numbers">
+          <div><dt>откликов за 21 день</dt><dd>468</dd></div>
+          <div><dt>ответов от человека</dt><dd>181</dd></div>
+          <div><dt>приглашений и разговоров</dt><dd>22</dd></div>
+          <div><dt>состоявшихся собеседований</dt><dd>7</dd></div>
+        </dl>
+        <p class="note">За эти 21 день предложения о работе ещё не было. Агент помог организовать поиск и добраться до разговоров, а оффер зависит от рынка, соответствия роли и встреч. У других кандидатов результаты будут своими.</p>
+      </section>
+
+      <section class="tariffs" id="tariffs" aria-labelledby="tariffs-title">
+        <div class="section-head">
+          <h2 id="tariffs-title">Тарифы</h2>
+          <p>Цены предварительные. В двух старших пакетах участвуют Алексей и карьерный консультант; задачи и число встреч выбираем по вашему запросу.</p>
+        </div>
+        <div class="plans">
+          <article class="plan">
+            <h3>Самостоятельно</h3>
+            <p class="plan-sub">Работаете с агентом сами</p>
+            <p class="price">15 000 ₽</p>
+            <ul>
+              <li>Агент с настройкой под ваш компьютер</li>
+              <li>По инструкции готовите материалы и настраиваете поиск</li>
+              <li>Находите вакансии, готовите отклики, ведёте учёт и готовитесь к встречам</li>
+              <li>Обновления инструкций и списка источников 3 месяца</li>
+              <li>Личные встречи не входят</li>
+            </ul>
+            <p class="small muted">Ключ на 3 месяца, до 2 устройств. Подходит, если готовы разобраться по инструкции.</p>
+            <a class="button" href="https://t.me/Aleksei_Shturbin" data-link="author">Обсудить в Telegram</a>
+            <p class="offer-note">Оплачивая, вы принимаете условия <a href="oferta/">публичной оферты</a>.</p>
+          </article>
+          <article class="plan featured">
+            <p class="badge">Рекомендуем</p>
+            <h3>С сопровождением</h3>
+            <p class="plan-sub">Помогаем там, где вам сложно</p>
+            <p class="price">45 000 ₽</p>
+            <ul>
+              <li>Всё из пакета «Самостоятельно»</li>
+              <li>Алексей помогает настроить поиск, разобраться с агентом и пройти первые отклики</li>
+              <li>Карьерный консультант — направление, резюме, интервью, зарплата</li>
+              <li>Вместе решаем, какие задачи нужны</li>
+              <li>До оплаты согласуем встречи, задачи и цену</li>
+            </ul>
+            <p class="small muted">Ключ на 3 месяца, до 2 устройств. Число встреч и задачи фиксируем до оплаты.</p>
+            <a class="button primary" href="https://t.me/Aleksei_Shturbin" data-link="author">Обсудить в Telegram</a>
+            <p class="offer-note">Оплачивая, вы принимаете условия <a href="oferta/">публичной оферты</a>.</p>
+          </article>
+          <article class="plan">
+            <h3>С группой экспертов</h3>
+            <p class="plan-sub">Работаем над вашим поиском вместе</p>
+            <p class="price">190 000 ₽</p>
+            <ul>
+              <li>Агент и личная работа с Алексеем и консультантом</li>
+              <li>Разбор цели, опыта, резюме и профилей</li>
+              <li>Налаживаем поиск и отклики, разбираем ответы работодателей</li>
+              <li>Интервью, разбор встреч, обсуждение офферов</li>
+              <li>Другой специалист — по согласованию</li>
+            </ul>
+            <p class="small muted">Ключ на 3 месяца, до 2 устройств. До начала определяем состав группы, число встреч, срок и задачи.</p>
+            <a class="button" href="https://t.me/Aleksei_Shturbin" data-link="author">Обсудить в Telegram</a>
+            <p class="offer-note">Оплачивая, вы принимаете условия <a href="oferta/">публичной оферты</a>.</p>
+          </article>
+        </div>
+        <dl class="terms">
+          <div><dt>Кто работает с вами</dt><dd>Алексей отвечает за агента и организацию поиска, консультант — за карьерные вопросы.</dd></div>
+          <div><dt>Чем отличаются старшие пакеты</dt><dd>Сопровождение решает выбранные вопросы, группа охватывает несколько этапов по общему плану.</dd></div>
+          <div><dt>Другие специалисты</dt><dd>Обсуждаем заранее: входят в пакет или оплачиваются отдельно.</dd></div>
+          <div><dt>Подписка на ИИ</dt><dd>Оплачивается отдельно, в вашем аккаунте. До покупки проверим ваш компьютер и подключения.</dd></div>
+        </dl>
+        <div class="choose">
+          <h3>Как выбрать пакет</h3>
+          <ol>
+            <li>Расскажите, что не получается.</li>
+            <li>Обсудим нужную помощь, Алексей покажет агента.</li>
+            <li>Зафиксируем состав работы: до оплаты вы знаете цену, кто помогает и сколько будет встреч.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="faq" id="faq" aria-labelledby="faq-title">
+        <div class="section-head">
+          <h2 id="faq-title">Вопросы</h2>
+        </div>
+        <div class="faq-list">
+          <details><summary>Чем сопровождение отличается от группы экспертов?</summary><p>Сопровождение решает выбранные вами вопросы. Группа экспертов охватывает несколько этапов поиска по общему плану.</p></details>
+          <details><summary>Кто помогает в сопровождении?</summary><p>Алексей — с агентом, поиском и откликами. Карьерный консультант — с выбором роли, резюме, интервью и зарплатой.</p></details>
+          <details><summary>Кто входит в группу экспертов?</summary><p>Алексей и карьерный консультант. Другие специалисты — по согласованию.</p></details>
+          <details><summary>Сколько встреч входит в сопровождение?</summary><p>Зависит от вашего запроса. Число встреч, участников и задачи согласуем в переписке до оплаты, и эта договорённость становится частью договора.</p></details>
+          <details><summary>Можно начать самостоятельно, а потом взять помощь?</summary><p>Да. Оплаченный пакет учтём.</p></details>
+          <details><summary>У меня уже хорошее резюме. Его будут переделывать?</summary><p>Сначала проверим. Агент меняет акценты под вакансию и сохраняет ваши факты.</p></details>
+          <details><summary>Я не знаю, какую работу искать. Мне подойдёт?</summary><p>Да: с этим работает карьерный консультант в сопровождении. Можно начать и с разбора вместе с агентом.</p></details>
+          <details><summary>Вы гарантируете трудоустройство?</summary><p>Нет. Решение о найме принимает работодатель.</p></details>
+          <details><summary>Можно посмотреть агента до покупки?</summary><p>Да, Алексей покажет его на созвоне.</p></details>
+          <details><summary>Нужно ли уметь программировать?</summary><p>Нет. Установка идёт по инструкции, а в сопровождении Алексей поможет.</p></details>
+          <details><summary>Что нужно для работы?</summary><p>Компьютер на macOS или Windows и Claude Code или Codex. Подписка на ИИ оплачивается отдельно, расход лимита зависит от задач.</p></details>
+          <details><summary>Где хранятся мои данные?</summary><p>На вашем компьютере. Резюме, факты, вакансии и отклики не уходят на наш сервер. Сервер ключей знает только ключ, случайный номер установки и номер заказа. Текст обрабатывает модель в вашем Claude Code или Codex на условиях её поставщика.</p></details>
+          <details><summary>Как работает ключ?</summary><p>После оплаты вы получаете ключ. Агент активирует его на вашем компьютере и скачивает методику, а потом раз в сутки проверяет, что ключ действует.</p></details>
+          <details><summary>На скольких устройствах работает ключ?</summary><p>Число устройств задаётся пакетом. Если вы сменили компьютер, напишите, и мы отвяжем старый.</p></details>
+          <details><summary>Что будет, когда ключ закончится?</summary><p>Агент перестанет получать методику, а ваша работа останется на компьютере: резюме, факты и отклики можно выгрузить. После продления всё продолжится с того же места. За сутки до конца агент предупредит.</p></details>
+          <details><summary>Как приходят обновления?</summary><p>Новые версии методики агент скачивает сам, пока ключ действует. В пакете «Самостоятельно» обновления идут 3 месяца.</p></details>
+          <details><summary>Психолог входит в пакет?</summary><p>Нет. Участие психолога согласуем отдельно.</p></details>
+          <details><summary>Можно ли вернуть деньги?</summary><p>Да. Если ключ ещё не активирован ни на одном устройстве, оплата за доступ возвращается полностью; за непроведённые встречи — тоже. Подробно — в разделе 9 <a href="oferta/#s9">публичной оферты</a>.</p></details>
+        </div>
+      </section>
+
+      <section class="contact" id="contact" aria-labelledby="contact-title">
+        <div class="section-head">
+          <h2 id="contact-title">Напишите Алексею</h2>
+          <p>Расскажите, где у вас сейчас сложности: два-три пункта из списка трудностей, какие должности рассматриваете и сколько уже ищете.</p>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="https://t.me/Aleksei_Shturbin" data-link="author">Telegram @Aleksei_Shturbin</a>
+          <a class="button" href="mailto:alexeyshturbin@gmail.com" data-link="mail">alexeyshturbin@gmail.com</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="legal">ИП Штурбин Алексей Сергеевич · ОГРНИП 323774600424298 · ИНН 771673814954 · 2026</p>
+      <ul class="footer-links">
+        <li><a href="#tg-channel-todo" data-link="channel">Telegram-канал</a></li>
+        <li><a href="#tg-bot-todo" data-link="bot">Бот поддержки</a></li>
+        <li><a href="oferta/">Публичная оферта</a></li>
+      </ul>
+    </footer>
+  </body>
+</html>

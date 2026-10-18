@@ -1,0 +1,12 @@
+{
+  "name": "hrshturman",
+  "owner": { "name": "HR Штурман" },
+  "metadata": { "description": "HR Штурман: поиск работы с кодовым агентом, данные остаются на компьютере" },
+  "plugins": [
+    {
+      "name": "hrshturman",
+      "source": "./plugin",
+      "description": "Установочный навык и локальный MCP-сервер hrs: анкета, резюме, сбор вакансий с HH, Telegram и LinkedIn"
+    }
+  ]
+}

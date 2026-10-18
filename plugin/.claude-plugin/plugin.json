@@ -1,0 +1,6 @@
+{
+  "name": "hrshturman",
+  "version": "0.1.0",
+  "description": "Установочный навык и локальный MCP-сервер hrs: анкета, резюме, сбор вакансий с HH, Telegram и LinkedIn",
+  "author": { "name": "HR Штурман" }
+}

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HR Штурман</title>
+<style>
+/*TOKENS*/
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font-sans); font-size: var(--font-text-md-size); line-height: var(--font-text-md-line-height);
+  color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: calc(var(--spacing) * 6) 16px calc(var(--spacing) * 12); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-bottom: calc(var(--spacing) * 6); }
+.brand { font-weight: var(--font-weight-semibold); font-size: var(--font-heading-sm-size); }
+.tabs { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius-full);
+  background: var(--color-surface-secondary); border: 1px solid var(--color-border-subtle); }
+.tabs button { border: 0; background: none; color: var(--color-text-secondary); font: inherit;
+  font-size: var(--font-text-sm-size); padding: 6px 14px; border-radius: var(--radius-full); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--color-surface-elevated); color: var(--color-text);
+  box-shadow: 0 0 0 1px var(--color-border); }
+h1 { font-size: var(--font-heading-lg-size); line-height: var(--font-heading-lg-line-height); margin: 0 0 8px;
+  font-weight: var(--font-weight-semibold); }
+.lead { color: var(--color-text-secondary); margin: 0 0 calc(var(--spacing) * 6); }
+.steps { display: flex; gap: 6px; margin-bottom: calc(var(--spacing) * 6); }
+.steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--color-border); }
+.steps span.done { background: var(--color-text-secondary); }
+.steps span.now { background: var(--color-ring); }
+.step-label { font-size: var(--font-text-xs-size); color: var(--color-text-tertiary); margin: -16px 0 16px;
+  text-transform: uppercase; letter-spacing: .04em; }
+.options { display: grid; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
+.option { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; }
+.option:hover { background: var(--color-surface-secondary); }
+.option:has(input:checked) { border-color: var(--color-ring); background: var(--color-background-info-surface); }
+.option input { margin: 3px 0 0; width: 18px; height: 18px; accent-color: var(--color-ring); flex: none; }
+label.field { display: block; margin-bottom: 16px; }
+label.field span { display: block; margin-bottom: 6px; font-weight: var(--font-weight-medium); }
+textarea, input[type=text] { width: 100%; font: inherit; color: inherit; background: var(--color-surface);
+  border: 1px solid var(--input-outline-border-color); border-radius: var(--control-radius-md); padding: 10px 12px; }
+textarea { min-height: 72px; resize: vertical; }
+textarea:focus, input:focus, button:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
+::placeholder { color: var(--input-placeholder-text-color); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.btn { font: inherit; font-weight: var(--button-font-weight); border-radius: var(--control-radius-md);
+  padding: 0 var(--control-gutter-xl); height: var(--control-size-2xl); border: 1px solid transparent; cursor: pointer; }
+.btn.primary { background: var(--color-background-primary-solid); color: var(--color-text-primary-solid); }
+.btn.primary:hover { background: var(--color-background-primary-solid-hover); }
+.btn.soft { background: var(--color-background-primary-soft); color: var(--color-text); }
+.btn.soft:hover { background: var(--color-background-primary-soft-hover); }
+.btn.ghost { background: none; color: var(--color-text-secondary); }
+.btn.ghost:hover { background: var(--color-background-primary-ghost-hover); }
+.btn:disabled { opacity: .5; cursor: default; }
+.note { font-size: var(--font-text-sm-size); color: var(--color-text-secondary); }
+.alert { border-radius: var(--alert-border-radius); padding: var(--alert-gutter); margin: 0 0 16px;
+  font-size: var(--font-text-sm-size); }
+.alert.ok { background: var(--color-background-success-surface); color: var(--color-text-success-surface); }
+.alert.err { background: var(--color-background-danger-surface); color: var(--color-text-danger-surface); }
+.alert.info { background: var(--color-background-info-surface); color: var(--color-text-info-surface); }
+.card { border: 1px solid var(--color-border); border-radius: var(--radius-2xl); padding: 16px;
+  margin-bottom: 12px; background: var(--color-surface); }
+.card h3 { margin: 0 0 6px; font-size: var(--font-text-md-size); }
+.card p { margin: 0; color: var(--color-text-secondary); font-size: var(--font-text-sm-size); }
+dl.answers { margin: 0; }
+dl.answers dt { font-size: var(--font-text-sm-size); color: var(--color-text-secondary); margin-top: 10px; }
+dl.answers dd { margin: 2px 0 0; }
+.group { margin-bottom: calc(var(--spacing) * 6); }
+.group h2 { font-size: var(--font-text-sm-size); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--color-text-tertiary); margin: 0 0 8px; font-weight: var(--font-weight-semibold); }
+ol.route { list-style: none; margin: 0; padding: 0; border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+  overflow: hidden; }
+ol.route li { display: grid; grid-template-columns: 2.25rem 1fr auto; gap: 8px; align-items: center;
+  padding: 10px 14px; border-top: 1px solid var(--color-border-subtle); }
+ol.route li:first-child { border-top: 0; }
+ol.route .n { font-family: var(--font-mono); font-size: var(--font-text-sm-size); color: var(--color-text-tertiary); }
+.badge { font-size: var(--badge-font-size-sm); font-weight: var(--badge-font-weight-md); border-radius: var(--badge-radius-md);
+  padding: 2px var(--badge-gutter-md); white-space: nowrap; }
+.badge.done { background: var(--color-background-success-surface); color: var(--color-text-success-surface); }
+.badge.active { background: var(--color-background-info-surface); color: var(--color-text-info-surface); }
+.badge.todo { color: var(--color-text-tertiary); }
+li.active .t { font-weight: var(--font-weight-medium); }
+.sync { font-size: var(--font-text-xs-size); color: var(--color-text-tertiary); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (min-width: 900px) {
+  .wrap { padding-top: calc(var(--spacing) * 12); }
+  .options { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">HR Штурман</div>
+    <nav class="tabs" role="tablist" aria-label="Разделы">
+      <button role="tab" id="tab-intake" aria-selected="true" data-view="intake">Анкета</button>
+      <button role="tab" id="tab-progress" aria-selected="false" data-view="progress">Маршрут</button>
+    </nav>
+  </header>
+  <div id="msg" role="status" aria-live="polite"></div>
+  <main id="view"><p class="note">Загружаю…</p></main>
+  <p class="sync" id="sync"></p>
+</div>
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const BLOCK_TITLES = {pains: "Что мешает", situation_goal: "Цель", situation_search: "Как идёт поиск",
+  situation_limits: "Условия"};
+let S = null, view = (location.hash || "#intake").slice(1), step = null, busy = false;
+
+// --- transport: the local hrs server in a browser, the MCP host when shown as an MCP App ---
+const inHost = window.parent !== window && location.pathname !== "/app";
+let seq = 0; const pending = new Map();
+function rpc(method, params) {
+  const id = ++seq;
+  window.parent.postMessage({jsonrpc: "2.0", id, method, params}, "*");
+  return new Promise((resolve, reject) => pending.set(id, {resolve, reject}));
+}
+function notify(method, params) { window.parent.postMessage({jsonrpc: "2.0", method, params}, "*"); }
+function fromToolResult(r) {
+  if (!r) return null;
+  if (r.isError) throw new Error((r.content && r.content[0] && r.content[0].text) || "Ошибка");
+  const sc = r.structuredContent;
+  if (sc) return sc.result !== undefined && Object.keys(sc).length === 1 ? sc.result : sc;
+  const text = r.content && r.content[0] && r.content[0].text;
+  return text ? JSON.parse(text) : null;
+}
+window.addEventListener("message", (e) => {
+  const m = e.data;
+  if (!inHost || !m || m.jsonrpc !== "2.0") return;
+  if (m.id !== undefined && pending.has(m.id)) {
+    const p = pending.get(m.id); pending.delete(m.id);
+    return m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
+  }
+  if (m.method === "ui/notifications/tool-result") {
+    try { const s = fromToolResult(m.params); if (s && s.blocks) { S = s; render(); } } catch (_) {}
+  }
+  if (m.method === "ui/notifications/host-context-changed" && m.params) theme(m.params.theme);
+});
+function theme(t) { if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; }
+const api = {
+  async state() {
+    if (inHost) return fromToolResult(await rpc("tools/call", {name: "ui_state", arguments: {}}));
+    return http("GET", "/api/state");
+  },
+  async answer(block, answer) {
+    if (inHost) return fromToolResult(await rpc("tools/call", {name: "ui_answer", arguments: {block, answer}}));
+    return http("POST", "/api/answer", {block, answer});
+  },
+  async confirm(expected_version) {
+    if (inHost) return fromToolResult(await rpc("tools/call", {name: "ui_confirm", arguments: {expected_version}}));
+    return http("POST", "/api/confirm", {expected_version});
+  },
+};
+async function http(method, url, body) {
+  const r = await fetch(url, {method, headers: body ? {"Content-Type": "application/json"} : {},
+    body: body ? JSON.stringify(body) : undefined, credentials: "same-origin"});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.message || ("Ошибка " + r.status));
+  return data;
+}
+
+// --- rendering ---
+function toTop() { if (!inHost) window.scrollTo(0, 0); }
+function flash(kind, text) { $("#msg").innerHTML = text ? `<div class="alert ${kind}">${esc(text)}</div>` : ""; }
+function blocks() { return S.blocks.map((b) => b.block); }
+function answered(block) {
+  const it = S.intake;
+  if (!it) return false;
+  if (block === "pains") return it.skipped || it.pain_ids.length > 0 || !!it.custom_pain;
+  const q = S.blocks.find((b) => b.block === block).questions;
+  return q.some((x) => it.situation[x.field]);
+}
+function render() {
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === view)));
+  $("#view").innerHTML = view === "progress" ? progressView() : intakeView();
+  bind();
+  $("#sync").textContent = "Обновлено " + new Date().toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"}) +
+    ". Ответы сразу видит агент в чате.";
+  if (inHost) notify("ui/notifications/size-changed", {width: document.body.scrollWidth, height: document.body.scrollHeight});
+}
+function intakeView() {
+  const it = S.intake, names = blocks();
+  if (it && it.status === "confirmed") {
+    return `<h1>Анкета подтверждена</h1><p class="lead">Агент знает, с чего начать. Изменить ответы можно в чате: напишите агенту, что поменялось.</p>${summary()}`;
+  }
+  if (step === null) step = names.find((b) => !answered(b)) || "review";
+  const at = step === "review" ? names.length : names.indexOf(step);
+  const bar = `<div class="steps" aria-hidden="true">${names.concat("review").map((_, i) =>
+    `<span class="${i < at ? "done" : i === at ? "now" : ""}"></span>`).join("")}</div>
+    <p class="step-label">Шаг ${at + 1} из ${names.length + 1}</p>`;
+  if (step === "review") {
+    return `${bar}<h1>Проверьте карту запроса</h1><p class="lead">Агент будет работать по ней. Подтвердите, если всё верно.</p>
+      ${summary()}<div class="actions"><button class="btn primary" id="confirm" ${it ? "" : "disabled"}>Всё верно, подтверждаю</button>
+      <button class="btn ghost" data-go="${names[names.length - 1]}">Назад</button></div>`;
+  }
+  const q = S.blocks.find((b) => b.block === step);
+  let body;
+  if (step === "pains") {
+    const picked = new Set(it ? it.pain_ids : []);
+    body = `<h1>Что мешает найти работу</h1><p class="lead">${esc(q.intro)}</p>
+      <fieldset class="options"><legend class="visually-hidden">Трудности</legend>${q.options.map((o) =>
+        `<label class="option"><input type="checkbox" name="pain" value="${o.id}" ${picked.has(o.id) ? "checked" : ""}><span>${esc(o.text)}</span></label>`).join("")}</fieldset>
+      <label class="field"><span>Свой вариант</span><input type="text" id="own" value="${esc(it && it.custom_pain || "")}" placeholder="Необязательно"></label>`;
+  } else {
+    const sit = it ? it.situation : {};
+    body = `<h1>${esc(BLOCK_TITLES[step])}</h1><p class="lead">Можно ответить не на все вопросы. Пустой ответ оставляет вопрос открытым.</p>
+      ${q.questions.map((x) => `<label class="field"><span>${esc(x.text)}</span><textarea name="${x.field}">${esc(sit[x.field] || "")}</textarea></label>`).join("")}`;
+  }
+  const prev = names[names.indexOf(step) - 1];
+  return `${bar}<form id="block">${body}<div class="actions"><button class="btn primary" type="submit">Сохранить и дальше</button>
+    ${step === "pains" ? `<button class="btn soft" type="button" id="skip">Пропустить</button>` : ""}
+    ${prev ? `<button class="btn ghost" type="button" data-go="${prev}">Назад</button>` : ""}</div></form>`;
+}
+function summary() {
+  const m = S.request_map;
+  if (!m) return `<p class="note">Пока нет ответов.</p>`;
+  const pains = m.skipped ? `<p>Трудности пропущены.</p>` : m.pains.map((p) =>
+    `<div class="card"><h3>${esc(p.pain)}</h3><p>Следующий шаг: ${esc(p.next_step)}</p></div>`).join("") +
+    (m.custom_pain ? `<div class="card"><h3>${esc(m.custom_pain)}</h3><p>Свой вариант</p></div>` : "");
+  const all = S.blocks.filter((b) => b.questions).flatMap((b) => b.questions);
+  const rows = all.filter((x) => m.situation[x.field]).map((x) => `<dt>${esc(x.text)}</dt><dd>${esc(m.situation[x.field])}</dd>`).join("");
+  return `${pains}${rows ? `<div class="card"><dl class="answers">${rows}</dl></div>` : ""}
+    ${m.unknown_fields.length ? `<p class="note">Без ответа: ${m.unknown_fields.length}. Можно вернуться к ним позже.</p>` : ""}
+    <p class="note">${esc(m.stored_data_notice)}</p>`;
+}
+function progressView() {
+  const groups = [];
+  for (const s of S.progress) {
+    if (!groups.length || groups[groups.length - 1].name !== s.group) groups.push({name: s.group, items: []});
+    groups[groups.length - 1].items.push(s);
+  }
+  const label = {done: "готово", active: "в работе", todo: "впереди"};
+  return `<h1>Маршрут</h1><p class="lead">26 этапов в четырёх группах. Агент идёт по ним по порядку.</p>` +
+    groups.map((g) => `<section class="group"><h2>${esc(g.name)}</h2><ol class="route">${g.items.map((s) =>
+      `<li class="${s.status}"><span class="n">${String(s.stage).padStart(2, "0")}</span><span class="t">${esc(s.title)}${
+        s.count ? ` <span class="note">· ${s.count}</span>` : ""}</span><span class="badge ${s.status}">${label[s.status]}</span></li>`).join("")}</ol></section>`).join("");
+}
+function bind() {
+  document.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => { step = b.dataset.go; flash(); render(); toTop(); });
+  const form = $("#block");
+  if (form) form.onsubmit = (e) => { e.preventDefault(); save(false); };
+  const skip = $("#skip");
+  if (skip) skip.onclick = () => save(true);
+  const c = $("#confirm");
+  if (c) c.onclick = async () => {
+    await run(() => api.confirm(S.intake.version), "Анкета подтверждена. Агент продолжит в чате.");
+  };
+}
+async function save(skip) {
+  const names = blocks();
+  let value;
+  if (step === "pains") {
+    if (skip) value = "пропустить";
+    else {
+      const ids = [...document.querySelectorAll("input[name=pain]:checked")].map((i) => Number(i.value));
+      const own = $("#own").value.trim();
+      value = [...ids, ...(own ? ["свой: " + own] : [])];
+      if (!value.length) return flash("err", "Отметьте хотя бы один пункт, напишите свой или нажмите «Пропустить».");
+    }
+  } else {
+    value = {};
+    document.querySelectorAll("#block textarea").forEach((t) => value[t.name] = t.value);
+  }
+  const next = names[names.indexOf(step) + 1] || "review";
+  if (await run(() => api.answer(step, value), "Сохранено.")) { step = next; render(); toTop(); }
+}
+async function run(fn, ok) {
+  if (busy) return false;
+  busy = true;
+  try { S = await fn(); flash("ok", ok); render(); return true; }
+  catch (e) { flash("err", e.message); return false; }
+  finally { busy = false; }
+}
+async function refresh() {
+  if (busy || document.activeElement && /TEXTAREA|INPUT/.test(document.activeElement.tagName)) return;
+  try { const s = await api.state(); if (JSON.stringify(s) !== JSON.stringify(S)) { S = s; render(); } } catch (_) {}
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  view = b.dataset.view; history.replaceState(null, "", "#" + view); flash(); render();
+});
+window.addEventListener("hashchange", () => {
+  const v = location.hash.slice(1);
+  if ((v === "intake" || v === "progress") && v !== view && S) { view = v; flash(); render(); }
+});
+(async function start() {
+  try {
+    if (inHost) {
+      const r = await rpc("ui/initialize", {protocolVersion: "2026-01-26", appInfo: {name: "HR Штурман", version: "1"},
+        clientInfo: {name: "HR Штурман", version: "1"}, appCapabilities: {}, capabilities: {}});
+      theme(r && r.hostContext && r.hostContext.theme);
+      notify("ui/notifications/initialized", {});
+    }
+    S = await api.state();
+    render();
+  } catch (e) { flash("err", e.message); }
+  if (!inHost) { setInterval(refresh, 4000); window.addEventListener("focus", refresh); }
+})();
+</script>
+</body>
+</html>

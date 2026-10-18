@@ -1,0 +1,146 @@
+/*
+Subset of OpenAI Apps SDK UI design tokens. MIT © OpenAI.
+Source: https://github.com/openai/apps-sdk-ui
+Local source: /Users/zhdanparfenov/Code/06_tools/Tools/design-systems/openai-codex/source/variables-{primitive,semantic,components}.css
+Adapted alpha() and spacing() to standard CSS; system fonts only.
+
+Copyright 2025 OpenAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+:root {
+  color-scheme: light dark;
+  --font-sans: ui-sans-serif, -apple-system, system-ui, "Segoe UI", "Noto Sans", "Helvetica",
+    "Arial", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", "Menlo", "Monaco", "Consolas",
+    "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --spacing: 0.25rem;
+  --radius-xs: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+  --font-heading-xl-size: 2rem;
+  --font-heading-xl-line-height: 2.375rem;
+  --font-heading-lg-size: 1.5rem;
+  --font-heading-lg-line-height: 1.75rem;
+  --font-heading-md-size: 1.25rem;
+  --font-heading-md-line-height: 1.625rem;
+  --font-heading-sm-size: 1.125rem;
+  --font-heading-sm-line-height: 1.625rem;
+  --font-text-md-size: 1rem;
+  --font-text-md-line-height: 1.5rem;
+  --font-text-sm-size: 0.875rem;
+  --font-text-sm-line-height: 1.25rem;
+  --font-text-xs-size: 0.75rem;
+  --font-text-xs-line-height: 1.125rem;
+  --gray-0: light-dark(#ffffff, #0d0d0d);
+  --gray-200: light-dark(#cdcdcd, #212121);
+  --color-surface: light-dark(var(--gray-0), var(--gray-200));
+  --gray-50: light-dark(#f9f9f9, #131313);
+  --gray-100: light-dark(#ededed, #181818);
+  --color-surface-secondary: light-dark(var(--gray-50), var(--gray-100));
+  --gray-75: light-dark(#f3f3f3, #161616);
+  --color-surface-tertiary: light-dark(var(--gray-75), var(--gray-50));
+  --gray-300: light-dark(#afafaf, #303030);
+  --color-surface-elevated: light-dark(var(--gray-0), var(--gray-300));
+  --gray-1000: light-dark(#0d0d0d, #ffffff);
+  --color-text: var(--gray-1000);
+  --gray-500: #5d5d5d;
+  --gray-700: light-dark(#303030, #afafaf);
+  --color-text-secondary: light-dark(var(--gray-500), var(--gray-700));
+  --gray-400: light-dark(#8f8f8f, #414141);
+  --gray-600: light-dark(#414141, #8f8f8f);
+  --color-text-tertiary: light-dark(var(--gray-400), var(--gray-600));
+  --alpha-base: light-dark(#0d0d0d, #ffffff);
+  --alpha-10: color-mix(in srgb, var(--alpha-base) 10%, transparent);
+  --alpha-12: color-mix(in srgb, var(--alpha-base) 12%, transparent);
+  --color-border: light-dark(var(--alpha-10), var(--alpha-12));
+  --alpha-05: color-mix(in srgb, var(--alpha-base) 5%, transparent);
+  --alpha-06: color-mix(in srgb, var(--alpha-base) 6%, transparent);
+  --color-border-subtle: light-dark(var(--alpha-05), var(--alpha-06));
+  --alpha-15: color-mix(in srgb, var(--alpha-base) 15%, transparent);
+  --alpha-20: color-mix(in srgb, var(--alpha-base) 20%, transparent);
+  --color-border-strong: light-dark(var(--alpha-15), var(--alpha-20));
+  --blue-500: #0169cc;
+  --blue-400: #0285ff;
+  --color-ring: light-dark(var(--blue-500), var(--blue-400));
+  --gray-900: light-dark(#181818, #ededed);
+  --gray-950: light-dark(#131313, #f3f3f3);
+  --color-background-primary-solid: light-dark(var(--gray-900), var(--gray-950));
+  --color-background-primary-solid-hover: light-dark(var(--gray-700), var(--gray-900));
+  --color-text-inverse: var(--gray-0);
+  --color-text-primary-solid: var(--color-text-inverse);
+  --color-background-primary-soft: light-dark(var(--gray-100), var(--gray-300));
+  --gray-150: light-dark(#dfdfdf, #1c1c1c);
+  --gray-350: light-dark(#9f9f9f, #393939);
+  --color-background-primary-soft-hover: light-dark(var(--gray-150), var(--gray-350));
+  --alpha-08: color-mix(in srgb, var(--alpha-base) 8%, transparent);
+  --color-background-primary-ghost-hover: light-dark(var(--alpha-08), var(--alpha-12));
+  --green-600: #008635;
+  --green-400: #04b84c;
+  --color-text-success-surface: light-dark(var(--green-600), var(--green-400));
+  --green-a25: color-mix(in srgb, var(--green-400) 8%, transparent);
+  --green-a50: color-mix(in srgb, var(--green-400) 15%, transparent);
+  --color-background-success-surface: light-dark(var(--green-a25), var(--green-a50));
+  --orange-700: #923b0f;
+  --orange-400: #fb6a22;
+  --color-text-warning-surface: light-dark(var(--orange-700), var(--orange-400));
+  --orange-a25: color-mix(in srgb, var(--orange-400) 7%, transparent);
+  --orange-a50: color-mix(in srgb, var(--orange-400) 16%, transparent);
+  --color-background-warning-surface: light-dark(var(--orange-a25), var(--orange-a50));
+  --red-600: #ba2623;
+  --red-400: #fa423e;
+  --color-text-danger-surface: light-dark(var(--red-600), var(--red-400));
+  --red-a25: color-mix(in srgb, var(--red-400) 8%, transparent);
+  --red-a50: color-mix(in srgb, var(--red-400) 16%, transparent);
+  --color-background-danger-surface: light-dark(var(--red-a25), var(--red-a50));
+  --red-700: #911e1b;
+  --red-500: #e02e2a;
+  --color-text-danger: light-dark(var(--red-700), var(--red-500));
+  --blue-600: #004f99;
+  --blue-300: #339cff;
+  --color-text-info-surface: light-dark(var(--blue-600), var(--blue-300));
+  --blue-a25: color-mix(in srgb, var(--blue-400) 4%, transparent);
+  --blue-a50: color-mix(in srgb, var(--blue-400) 13%, transparent);
+  --color-background-info-surface: light-dark(var(--blue-a25), var(--blue-a50));
+  --control-size-2xl: 2.75rem;
+  --control-gutter-xl: 1rem;
+  --control-radius-md: var(--radius-md);
+  --button-font-weight: var(--font-weight-medium);
+  --button-gap-lg: 6px;
+  --badge-radius-md: var(--radius-xs);
+  --badge-font-size-sm: var(--font-text-xs-size);
+  --badge-font-weight-md: var(--font-weight-semibold);
+  --control-gutter-2xs: 0.375rem;
+  --badge-gutter-md: var(--control-gutter-2xs);
+  --alpha-16: color-mix(in srgb, var(--alpha-base) 16%, transparent);
+  --alpha-25: color-mix(in srgb, var(--alpha-base) 25%, transparent);
+  --color-border-primary-outline: light-dark(var(--alpha-16), var(--alpha-25));
+  --input-outline-border-color: var(--color-border-primary-outline);
+  --input-placeholder-text-color: var(--color-text-tertiary);
+  --dialog-backdrop-dim-background: light-dark(rgb(0 0 0 / 30%), rgb(0 0 0 / 50%));
+  --dialog-container-inner-padding: calc(var(--spacing) * 5);
+  --dialog-max-width: 450px;
+  --alert-border-radius: var(--radius-xl);
+  --alert-gutter: calc(var(--spacing) * 4);
+}

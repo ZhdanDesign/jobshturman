@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR Штурман</title>
+<style>
+:root {
+  --paper: #EEF1EC;
+  --sheet: #F8FAF7;
+  --ink: #1C2B3A;
+  --ink-soft: #4E5D6B;
+  --rule: #C9D1C7;
+  --brass: #8C6D23;
+  --sea: #2F6B5E;
+  --signal: #A8382B;
+  --serif: "Iowan Old Style", "Charter", "Georgia", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); font: 16px/1.5 var(--sans); background: var(--paper); }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.2; margin: 0; }
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.5rem; margin-bottom: .5rem; }
+h3 { font-size: 1.125rem; }
+p { margin: 0 0 1rem; max-width: 68ch; }
+.muted { color: var(--ink-soft); }
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+
+/* The course: the four parts of the route as waypoints on one line */
+.course { padding: 2rem 1.5rem; border-right: 1px solid var(--rule); position: sticky; top: 0; height: 100vh; }
+.course h1 { margin-bottom: .25rem; }
+.course .who { color: var(--ink-soft); font-size: .875rem; margin-bottom: 2rem; }
+.course ol { list-style: none; margin: 0; padding: 0 0 0 1.75rem; position: relative; }
+.course ol::before { content: ""; position: absolute; left: .5rem; top: .6rem; bottom: .6rem; width: 2px; background: var(--rule); }
+.course li { position: relative; margin-bottom: 1.5rem; }
+.course li::before { content: ""; position: absolute; left: -1.6rem; top: .3rem; width: .9rem; height: .9rem; border-radius: 50%;
+  background: var(--sheet); border: 2px solid var(--rule); }
+.course li[data-state="done"]::before { background: var(--sea); border-color: var(--sea); }
+.course li[data-state="active"]::before { border-color: var(--brass); background: var(--brass); box-shadow: 0 0 0 4px rgba(140,109,35,.18); }
+.course button { all: unset; cursor: pointer; font-family: var(--serif); font-size: 1.0625rem; }
+.course button[aria-current="page"] { text-decoration: underline; text-decoration-color: var(--brass); text-underline-offset: 4px; }
+.course .hint { display: block; font-size: .8125rem; color: var(--ink-soft); }
+.course .pause { margin-top: 2rem; font-size: .875rem; }
+
+main { padding: 2rem clamp(1rem, 4vw, 3rem); max-width: 860px; }
+section[hidden] { display: none; }
+.block { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 1.25rem; margin-bottom: 1.25rem; }
+label { display: block; font-weight: 600; margin: .75rem 0 .25rem; }
+input[type=text], input[type=datetime-local], textarea, select {
+  width: 100%; font: inherit; color: inherit; padding: .5rem .625rem; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
+textarea { min-height: 4.5rem; resize: vertical; }
+.check { display: flex; gap: .625rem; align-items: flex-start; font-weight: 400; margin: .375rem 0; }
+.check input { margin-top: .3rem; }
+.row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 1 1 10rem; }
+button.act { font: inherit; font-weight: 600; padding: .5rem 1rem; border-radius: 4px; border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
+button.act.quiet { background: transparent; color: var(--ink); }
+button.act:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+.problems { border-left: 3px solid var(--signal); padding: .5rem .75rem; margin: .75rem 0; background: #fbefed; }
+.problems li { margin: .25rem 0; }
+.ok { border-left: 3px solid var(--sea); padding: .5rem .75rem; margin: .75rem 0; background: #e9f2ef; }
+.tag { display: inline-block; font-size: .8125rem; padding: .125rem .5rem; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-soft); }
+.tag.go { border-color: var(--brass); color: var(--brass); }
+.tag.done { border-color: var(--sea); color: var(--sea); }
+.tag.stop { border-color: var(--signal); color: var(--signal); }
+.card h3 { margin-bottom: .25rem; }
+.card .meta { color: var(--ink-soft); font-size: .875rem; margin-bottom: .75rem; }
+.facts li { margin-bottom: .5rem; }
+.funnel { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .75rem; margin: 0; }
+.funnel div { border-top: 2px solid var(--rule); padding-top: .375rem; }
+.funnel dt { font-size: .875rem; color: var(--ink-soft); }
+.funnel dd { margin: 0; font-family: var(--serif); font-size: 1.5rem; }
+.steps li { margin-bottom: .5rem; }
+#toast { position: fixed; bottom: 1rem; right: 1rem; max-width: 26rem; padding: .75rem 1rem; border-radius: 4px; background: var(--ink); color: #fff; }
+#toast.err { background: var(--signal); }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .course { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 1rem; }
+  .course .who, .course .hint { display: none; }
+  .course ol { display: flex; gap: 1rem; padding: 0; overflow-x: auto; }
+  .course ol::before, .course li::before { display: none; }
+  .course li { margin: 0; white-space: nowrap; }
+  .course .pause { margin-top: .75rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="course" aria-label="Разделы">
+    <h1>HR Штурман</h1>
+    <div class="who">Данные хранятся только на этом компьютере</div>
+    <ol id="course">
+      <li data-step="intake"><button>Диагностика</button><span class="hint">Что мешает сейчас</span></li>
+      <li data-step="resume"><button>Факты и резюме</button><span class="hint">Из чего собрано резюме</span></li>
+      <li data-step="apps"><button>Отклики</button><span class="hint">Карточки вакансий</span></li>
+      <li data-step="status"><button>Статус поиска</button><span class="hint">Воронка и следующий шаг</span></li>
+    </ol>
+    <div class="pause"><label class="check"><input type="checkbox" id="pause"> Пауза в поиске</label></div>
+  </nav>
+
+  <main>
+    <section id="intake">
+      <h2>Что мешает найти работу</h2>
+      <p class="muted">Отметьте два или три пункта, которые мешают сейчас. Можно больше, можно свой ответ или пропустить. Ничего не отправляется, пока вы не нажмёте «Подтвердить».</p>
+      <form class="block" id="intake-form">
+        <div id="pains"></div>
+        <label for="custom-pain">Своими словами</label>
+        <textarea id="custom-pain"></textarea>
+        <label class="check"><input type="checkbox" id="skipped"> Пропустить этот вопрос</label>
+        <label for="target-roles">Какие должности или направления рассматриваете</label>
+        <input type="text" id="target-roles" placeholder="Если пока не знаете, так и напишите">
+        <label for="constraints">Что обязательно: город, удалёнка, доход, отрасль</label>
+        <textarea id="constraints"></textarea>
+        <label for="ready">Что уже готово: резюме, профили, список компаний</label>
+        <input type="text" id="ready">
+        <label for="hidden">Что нельзя показывать консультантам и работодателям</label>
+        <input type="text" id="hidden">
+        <div class="row" style="margin-top:1rem"><button class="act quiet" type="submit">Сохранить черновик</button></div>
+      </form>
+      <div id="request-map"></div>
+    </section>
+
+    <section id="resume" hidden>
+      <h2>Факты и резюме</h2>
+      <p class="muted">Каждая строка резюме опирается на факт. Факт попадает в утверждённое резюме, только когда вы его подтвердили.</p>
+      <div class="block">
+        <h3>Факты</h3>
+        <ul class="facts" id="facts"></ul>
+        <form id="fact-form">
+          <label for="fact-text">Достижение или факт</label>
+          <textarea id="fact-text" placeholder="Например: вывел направление на окупаемость за 14 месяцев" required></textarea>
+          <div class="row">
+            <div><label for="fact-employer">Компания</label><input type="text" id="fact-employer"></div>
+            <div><label for="fact-source">Откуда факт</label><input type="text" id="fact-source" placeholder="Старое резюме, стр. 1"></div>
+            <div><label for="fact-disclosure">Можно раскрывать</label>
+              <select id="fact-disclosure"><option value="public">Да</option><option value="generalize_only">Только обобщённо</option><option value="nda">Нет, NDA</option></select></div>
+          </div>
+          <div class="row" style="margin-top:1rem"><button class="act quiet" type="submit">Добавить факт</button></div>
+        </form>
+      </div>
+      <form class="block" id="resume-form">
+        <h3>Мастер-резюме</h3>
+        <label for="headline">Заголовок</label>
+        <input type="text" id="headline" placeholder="Коммерческий директор, B2B-дистрибуция">
+        <div id="roles"></div>
+        <div class="row" style="margin-top:1rem">
+          <button class="act quiet" type="button" id="add-role">Добавить место работы</button>
+          <button class="act quiet" type="submit">Сохранить и проверить</button>
+          <button class="act" type="button" id="approve">Утвердить резюме</button>
+          <button class="act quiet" type="button" id="render">Сделать DOCX и PDF</button>
+        </div>
+        <div id="validation"></div>
+      </form>
+    </section>
+
+    <section id="apps" hidden>
+      <h2>Отклики</h2>
+      <p class="muted">Вакансии приходят от сборщика или от вашего AI. Отклик вы отправляете сами, а здесь отмечаете его со ссылкой или номером.</p>
+      <div class="row" style="margin-bottom:1rem">
+        <button class="act quiet" id="sync">Забрать новые вакансии</button>
+        <button class="act quiet" id="collect">Запустить сбор по источникам</button>
+      </div>
+      <div id="cards"></div>
+    </section>
+
+    <section id="status" hidden>
+      <h2>Статус поиска</h2>
+      <div class="block"><h3>Что дальше</h3><ul class="steps" id="next"></ul></div>
+      <div class="block"><h3>Воронка</h3><dl class="funnel" id="funnel"></dl></div>
+      <div class="block"><h3>Охват источников</h3><div id="coverage"></div></div>
+      <div class="block"><h3>Ограничения</h3><ul id="limits"></ul></div>
+    </section>
+  </main>
+</div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state = { intake: null, facts: [], resume: null, apps: [], status: null, roles: [] };
+
+const ERRORS = {
+  service_unreachable: "Сборщик вакансий не запущен. Запустите его и повторите.",
+  not_authenticated: "Сборщик отказал в доступе: проверьте токен HRS_COLLECTOR_TOKEN.",
+  state_version_conflict: "Данные изменились в другом окне или в чате. Страница обновлена, повторите действие.",
+  missing_fact: "Нужен подтверждённый факт для каждой строки.",
+  fact_conflict: "Факт относится к другой компании или отклонён.",
+  restricted_disclosure: "Данные под NDA или похожи на пароль и не сохраняются.",
+  invalid_material: "Комплект изменился или содержит незаполненные места.",
+  incomplete_source: "Нет полного текста вакансии.",
+  expired_authority: "Срок разрешения истёк.",
+  revoked_authority: "Разрешение отозвано.",
+};
+
+function toast(text, err) {
+  const t = $("#toast"); t.textContent = text; t.className = err ? "err" : ""; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 4000);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) {
+    toast(ERRORS[data.error] || data.message, true);
+    if (data.error === "state_version_conflict") await load();
+    throw new Error(data.error);
+  }
+  return data;
+}
+
+async function load() {
+  const [intake, facts, resume, apps, status] = await Promise.all(
+    ["/api/intake", "/api/facts", "/api/resume", "/api/applications", "/api/status"].map((p) => api(p)));
+  Object.assign(state, { intake, facts, resume, apps, status });
+  state.roles = resume ? structuredClone(resume.content.experience || []) : state.roles;
+  render();
+}
+
+function show(step) {
+  document.querySelectorAll("main section").forEach((s) => (s.hidden = s.id !== step));
+  document.querySelectorAll("#course li button").forEach((b) => b.removeAttribute("aria-current"));
+  document.querySelector(`#course li[data-step="${step}"] button`).setAttribute("aria-current", "page");
+}
+
+function render() {
+  const s = state.status, it = state.intake.intake;
+  const marks = {
+    intake: s.intake === "confirmed" ? "done" : "active",
+    resume: s.resume.some((r) => r.status === "approved") ? "done" : s.intake === "confirmed" ? "active" : "",
+    apps: s.funnel.counts.sent_confirmed ? "done" : state.apps.length ? "active" : "",
+    status: "",
+  };
+  document.querySelectorAll("#course li").forEach((li) => (li.dataset.state = marks[li.dataset.step]));
+  $("#pause").checked = s.paused;
+  renderIntake(it); renderFacts(); renderResume(); renderCards(); renderStatus();
+}
+
+function renderIntake(it) {
+  $("#pains").innerHTML = Object.entries(state.intake.pains).map(([id, text]) =>
+    `<label class="check"><input type="checkbox" name="pain" value="${id}" ${it?.pain_ids.includes(+id) ? "checked" : ""}> ${esc(text)}</label>`).join("");
+  const sit = it?.situation || {};
+  $("#custom-pain").value = it?.custom_pain || "";
+  $("#skipped").checked = !!it?.skipped;
+  $("#target-roles").value = sit.target_roles || "";
+  $("#constraints").value = sit.constraints || "";
+  $("#ready").value = sit.ready_materials || "";
+  $("#hidden").value = sit.do_not_disclose || "";
+  if (!it) { $("#request-map").innerHTML = ""; return; }
+  const map = it.request_map;
+  const confirmed = it.status === "confirmed";
+  $("#request-map").innerHTML = `<div class="block">
+    <h3>Карта запроса ${confirmed ? '<span class="tag done">подтверждена</span>' : '<span class="tag go">черновик</span>'}</h3>
+    ${map.first_focus ? `<p>Выбрано много пунктов. Предлагаем начать с первого: «${esc(state.intake.pains[map.first_focus])}». Остальные сохранены.</p>` : ""}
+    <ul class="steps">${map.pains.map((p) => `<li><strong>${esc(p.pain)}</strong><br>${esc(p.next_step)}</li>`).join("") || "<li>Трудности не выбраны.</li>"}</ul>
+    ${map.custom_pain ? `<p>Своими словами: ${esc(map.custom_pain)}</p>` : ""}
+    <p class="muted">${esc(map.stored_data_notice)}</p>
+    ${confirmed ? "" : `<button class="act" id="confirm-intake">Подтвердить карту запроса</button>`}
+  </div>`;
+  if (!confirmed) $("#confirm-intake").onclick = async () => {
+    await api("/api/intake/confirm", { expected_version: it.version }); toast("Карта запроса подтверждена"); load();
+  };
+}
+
+$("#intake-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const skipped = $("#skipped").checked;
+  const situation = Object.fromEntries([["target_roles", "#target-roles"], ["constraints", "#constraints"],
+    ["ready_materials", "#ready"], ["do_not_disclose", "#hidden"]].map(([k, sel]) => [k, $(sel).value.trim()]).filter(([, v]) => v));
+  await api("/api/intake", {
+    pain_ids: skipped ? [] : [...document.querySelectorAll("input[name=pain]:checked")].map((i) => +i.value),
+    custom_pain: skipped ? null : $("#custom-pain").value.trim() || null, skipped, situation,
+    expected_version: state.intake.intake?.version,
+  });
+  toast("Черновик сохранён"); load();
+};
+
+const FACT_STATUS = { reported: ["не подтверждён", "go"], needs_confirmation: ["нужно уточнить", "go"],
+                      confirmed: ["подтверждён", "done"], rejected: ["отклонён", "stop"] };
+function renderFacts() {
+  $("#facts").innerHTML = state.facts.map((f) => `<li>
+    ${esc(f.assertion)} ${f.employer ? `<span class="muted">(${esc(f.employer)})</span>` : ""}
+    <span class="tag ${FACT_STATUS[f.status][1]}">${FACT_STATUS[f.status][0]}</span>
+    ${f.disclosure === "nda" ? '<span class="tag stop">NDA</span>' : ""}
+    ${f.status !== "confirmed" ? `<button class="act quiet" data-fact="${f.object_id}" data-v="${f.version}">Подтвердить</button>` : ""}
+  </li>`).join("") || '<li class="muted">Фактов пока нет. Добавьте первый ниже или попросите AI разобрать старое резюме.</li>';
+  document.querySelectorAll("[data-fact]").forEach((b) => (b.onclick = async () => {
+    await api(`/api/facts/${b.dataset.fact}/status`, { status: "confirmed", expected_version: +b.dataset.v });
+    toast("Факт подтверждён"); load();
+  }));
+}
+
+$("#fact-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const source = $("#fact-source").value.trim();
+  await api("/api/facts", { assertion: $("#fact-text").value.trim(), employer: $("#fact-employer").value.trim(),
+    disclosure: $("#fact-disclosure").value,
+    source_refs: source ? [{ source_id: "manual", locator: source }] : [] });
+  e.target.reset(); toast("Факт добавлен"); load();
+};
+
+function factOptions(selected) {
+  return state.facts.filter((f) => f.status !== "rejected").map((f) =>
+    `<option value="${f.object_id}" ${selected.includes(f.object_id) ? "selected" : ""}>${esc(f.assertion.slice(0, 70))}</option>`).join("");
+}
+
+function renderResume() {
+  const content = state.resume?.content || {};
+  $("#headline").value = content.headline || "";
+  $("#roles").innerHTML = state.roles.map((r, i) => `<fieldset class="block" data-role="${i}" style="margin-top:1rem">
+    <legend>Место работы ${i + 1}</legend>
+    <div class="row">
+      <div><label>Компания</label><input type="text" data-k="employer" value="${esc(r.employer)}"></div>
+      <div><label>Должность</label><input type="text" data-k="title" value="${esc(r.title)}"></div>
+      <div><label>С</label><input type="text" data-k="start" value="${esc(r.start)}" placeholder="2021"></div>
+      <div><label>По</label><input type="text" data-k="end" value="${esc(r.end)}" placeholder="2024"></div>
+    </div>
+    ${(r.bullets || []).map((b, j) => `<div class="row" data-bullet="${j}">
+      <div><label>Достижение</label><input type="text" data-b="text" value="${esc(b.text)}"></div>
+      <div><label>На каком факте основано</label><select data-b="fact_ids" multiple size="2">${factOptions(b.fact_ids || [])}</select></div>
+    </div>`).join("")}
+    <button class="act quiet" type="button" data-add-bullet="${i}" style="margin-top:.75rem">Добавить достижение</button>
+  </fieldset>`).join("");
+  document.querySelectorAll("[data-add-bullet]").forEach((b) => (b.onclick = () => {
+    collectRoles(); state.roles[+b.dataset.addBullet].bullets = [...(state.roles[+b.dataset.addBullet].bullets || []), { text: "", fact_ids: [] }];
+    renderResume();
+  }));
+  const v = state.resume?.validation;
+  const approved = state.resume?.status === "approved";
+  $("#approve").disabled = !state.resume || approved;
+  $("#render").disabled = !approved;
+  const r = state.resume?.render;
+  const rendered = r && r.content_hash === state.resume.approved_hash ? `<div class="${r.text_extraction.docx.ok && r.text_extraction.pdf.ok ? "ok" : "problems"}">
+    Файлы: ${r.files.map((f) => esc(f.path)).join(", ")}.
+    ${r.text_extraction.docx.ok && r.text_extraction.pdf.ok ? "Весь текст читается из файлов." :
+      `Из файлов не читаются строки: ${[...r.text_extraction.docx.missing, ...r.text_extraction.pdf.missing].map(esc).join("; ")}`}
+    Вёрстку проверьте сами, открыв файл.</div>` : "";
+  $("#validation").innerHTML = !v ? "" : approved ? '<div class="ok">Резюме утверждено.</div>' + rendered
+    : v.ok && !v.warnings.length ? '<div class="ok">Ошибок нет. Можно утверждать.</div>'
+    : `<div class="problems"><ul>${v.errors.map((e) => `<li>${esc(problemText(e))}</li>`).join("")}
+       ${v.warnings.length ? `<li>Не подтверждено фактов: ${v.warnings.length}. Подтвердите их выше перед утверждением.</li>` : ""}</ul></div>`;
+}
+
+function problemText(e) {
+  const fact = state.facts.find((f) => f.object_id === e.fact_id);
+  const where = e.path.startsWith("experience") ? `Место работы ${+e.path.match(/\d+/)[0] + 1}: ` : "";
+  const quote = fact ? `«${fact.assertion}»` : "";
+  const text = {
+    fact_conflict: `факт ${quote} относится к другой компании (${fact?.employer || "не указана"}) или отклонён`,
+    restricted_disclosure: `факт ${quote} под NDA, его нельзя использовать в резюме`,
+    invalid_material: "в тексте осталось незаполненное место",
+    missing_fact: e.fact_id ? "строка ссылается на удалённый факт"
+      : e.message.startsWith("number") ? `число ${e.message.split(" ")[1]} не встречается в выбранных фактах`
+      : "у строки нет подтверждающего факта",
+  }[e.code];
+  return where + (text || e.message);
+}
+
+function collectRoles() {
+  document.querySelectorAll("[data-role]").forEach((fs) => {
+    const role = state.roles[+fs.dataset.role];
+    fs.querySelectorAll("[data-k]").forEach((inp) => (role[inp.dataset.k] = inp.value.trim()));
+    fs.querySelectorAll("[data-bullet]").forEach((row) => {
+      role.bullets[+row.dataset.bullet] = { text: row.querySelector("[data-b=text]").value.trim(),
+        fact_ids: [...row.querySelector("select").selectedOptions].map((o) => o.value) };
+    });
+  });
+}
+
+$("#add-role").onclick = () => { collectRoles(); state.roles.push({ employer: "", title: "", start: "", end: "", bullets: [] }); renderResume(); };
+$("#resume-form").onsubmit = async (e) => {
+  e.preventDefault(); collectRoles();
+  const content = { track_id: "main", language: "ru", headline: $("#headline").value.trim(),
+    experience: state.roles.map((r) => ({ ...r, bullets: (r.bullets || []).filter((b) => b.text) })) };
+  const res = await api("/api/resume", { content, expected_version: state.resume?.version });
+  toast(res.validation.ok ? "Резюме сохранено" : "Сохранено, но есть ошибки", !res.validation.ok); load();
+};
+$("#render").onclick = async () => {
+  await api("/api/resume/render", {}); toast("Файлы резюме готовы"); load();
+};
+$("#approve").onclick = async () => {
+  await api("/api/resume/approve", { expected_version: state.resume.version }); toast("Резюме утверждено"); load();
+};
+
+const APP_STATE = {
+  needs_full_text: ["нет полного текста", "stop"], found: ["найдена", ""], evaluated: ["оценена", "go"],
+  deferred: ["отложена", ""], rejected_policy: ["не подходит", ""], approved: ["готовим комплект", "go"],
+  draft_ready: ["комплект готов", "go"], authorized: ["можно откликаться", "go"], sending: ["отправляется", "go"],
+  sent_confirmed: ["отклик отправлен", "done"], send_unknown: ["неясно, ушёл ли отклик", "stop"],
+  not_sent_confirmed: ["не отправлен", "stop"], blocked: ["заблокирована", "stop"],
+};
+const FUNNEL_NAMES = { awaiting_reply: "ждём ответа", invited: "приглашение", employer_rejected: "отказ",
+  employer_frozen: "вакансия заморожена", interview_done: "интервью прошло", offer_discussion: "обсуждаем оффер" };
+
+function renderCards() {
+  $("#cards").innerHTML = state.apps.map((a) => {
+    const v = a.vacancy, [label, tone] = APP_STATE[a.state];
+    const act = (name, text, quiet) => `<button class="act ${quiet ? "quiet" : ""}" data-app="${a.object_id}" data-act="${name}">${text}</button>`;
+    let actions = "";
+    if (["evaluated", "deferred"].includes(a.state) && a.score?.final)
+      actions = act("approve", "Откликаться") + act("defer", "Отложить", 1) + act("reject", "Не подходит", 1);
+    else if (a.state === "needs_full_text" && v.collector_vacancy_id) actions = act("fetch_full", "Дочитать описание", 1);
+    else if (a.state === "draft_ready") actions = act("authorize", "Разрешить отклик этим комплектом");
+    else if (a.state === "authorized") actions = act("record_sent", "Я откликнулся") + act("revoke", "Отозвать разрешение", 1);
+    else if (a.state === "sent_confirmed") actions = `<select data-event="${a.object_id}"><option value="">Ответ работодателя…</option>
+      ${Object.entries(FUNNEL_NAMES).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>`;
+    return `<article class="block card">
+      <h3>${esc(v.title)}</h3>
+      <div class="meta">${esc(v.company || "Компания не указана")}, ${esc(v.source)} ${v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">открыть вакансию</a>` : ""}</div>
+      <span class="tag ${tone}">${label}</span>
+      ${a.score ? `<p style="margin-top:.75rem">Оценка ${a.score.final ?? a.score.preliminary} из 5${a.score.final ? "" : " (предварительно)"}. ${esc(a.score.why)}</p>` : ""}
+      ${a.score?.risks?.length ? `<p class="muted">Риски: ${a.score.risks.map(esc).join("; ")}</p>` : ""}
+      ${a.material ? `<p class="muted">Комплект для канала ${esc(a.material.channel)}</p>` : ""}
+      ${a.evidence ? `<p class="muted">Отправка: ${esc(a.evidence.proof_ref)}${a.evidence.level === "self_reported" ? ", отмечено вами" : ""}</p>` : ""}
+      ${a.funnel.length ? `<p>${a.funnel.map((f) => esc(FUNNEL_NAMES[f.kind])).join(", ")}</p>` : ""}
+      ${a.blocker ? `<div class="problems">${esc(a.blocker.reason || a.blocker.code)}</div>` : ""}
+      <div class="row" style="margin-top:.75rem">${actions}</div>
+    </article>`;
+  }).join("") || '<div class="block muted">Вакансий пока нет. Их добавит сборщик или ваш AI командой «найди вакансии».</div>';
+
+  document.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => appAction(b.dataset.app, b.dataset.act)));
+  document.querySelectorAll("[data-event]").forEach((sel) => (sel.onchange = async () => {
+    if (!sel.value) return;
+    const a = state.apps.find((x) => x.object_id === sel.dataset.event);
+    const source = prompt("Откуда узнали: письмо, чат HH, звонок?"); if (!source) return;
+    await api(`/api/applications/${a.object_id}/employer_event`, { expected_version: a.version, kind: sel.value,
+      occurred_at: new Date().toISOString(), source });
+    toast("Ответ записан"); load();
+  }));
+}
+
+async function appAction(id, name) {
+  const a = state.apps.find((x) => x.object_id === id);
+  const base = { expected_version: a.version };
+  if (["approve", "defer", "reject"].includes(name)) {
+    await api(`/api/applications/${id}/decide`, { ...base, decision: name, reason: "" });
+  } else if (name === "authorize") {
+    const days = prompt("На сколько дней разрешить отклик?", "3"); if (!days) return;
+    const expires = new Date(Date.now() + (+days) * 86400000).toISOString();
+    await api(`/api/applications/${id}/authorize`, { ...base, material_hash: a.material.hash, channel: a.material.channel, expires_at: expires });
+  } else if (name === "record_sent") {
+    const proof = prompt("Ссылка на отклик, его номер или имя скриншота"); if (!proof) return;
+    await api(`/api/applications/${id}/record_sent`, { ...base, proof_ref: proof, observed_at: new Date().toISOString() });
+  } else if (name === "fetch_full") {
+    await api(`/api/applications/${id}/fetch_full`, {});
+  } else {
+    await api(`/api/applications/${id}/${name}`, base);
+  }
+  toast("Готово"); load();
+}
+
+const FUNNEL_LABELS = { found: "Найдено", needs_full_text: "Без полного текста", evaluated: "Оценено",
+  rejected_or_deferred: "Отложено или не подходит", prepared: "Комплект готов", authorized: "Разрешено",
+  sent_confirmed: "Отправлено", send_unknown: "Неясно, ушёл ли отклик", invited: "Приглашения", interviews: "Интервью",
+  employer_rejected: "Отказы работодателя" };
+const OWNERS = { candidate: "вы", ai: "AI", collector: "сборщик", runner: "приложение" };
+
+function renderStatus() {
+  const s = state.status;
+  $("#next").innerHTML = s.next_steps.map((n) => `<li>${esc(n.action)}${n.title ? `: ${esc(n.title)}` : ""} <span class="muted">(${OWNERS[n.owner]})</span></li>`).join("")
+    || "<li>Открытых шагов нет.</li>";
+  $("#funnel").innerHTML = Object.entries(FUNNEL_LABELS).map(([k, t]) => `<div><dt>${t}</dt><dd>${s.funnel.counts[k]}</dd></div>`).join("");
+  renderCoverage(s.coverage);
+  $("#limits").innerHTML = s.limitations.map((l) => `<li>${esc(l)}</li>`).join("");
+}
+
+const RUN_STATUS = { ok: "прочитан", no_new: "нового нет", partial: "прочитан частично", no_access: "нет доступа",
+  error: "ошибка", skipped: "пропущен", pending: "в очереди" };
+function renderCoverage(c) {
+  if (!c) { $("#coverage").innerHTML = '<p class="muted">Сбор ещё не запускался. «Вакансий нет» пока ничего не значит.</p>'; return; }
+  const n = c.counts;
+  $("#coverage").innerHTML = `<p>${c.complete ? '<span class="tag done">все источники прочитаны</span>' : '<span class="tag stop">охват неполный</span>'}
+    Источников ${n.requested}, прочитано полностью ${n.read_fully}, частично ${n.partial}, без доступа ${n.no_access},
+    с ошибкой ${n.failed}, не запускались ${n.not_run}. Отсеяно как не вакансии: ${c.skipped_not_vacancy ?? 0}.</p>
+    ${c.sources.filter((r) => !r.complete).slice(0, 20).map((r) =>
+      `<p class="muted">${esc(r.title || r.source_id)}: ${RUN_STATUS[r.run_status] || esc(r.run_status)}${r.reason ? `, ${esc(r.reason)}` : ""}${r.error_code ? ` (${esc(r.error_code)})` : ""}</p>`).join("")}`;
+}
+
+async function syncVacancies(run) {
+  toast(run ? "Сбор идёт, это может занять несколько минут" : "Забираю вакансии");
+  const res = await api("/api/vacancies/sync", { run });
+  toast(`Новых карточек: ${res.imported.added}, обновлено: ${res.imported.updated}`); load();
+}
+$("#sync").onclick = () => syncVacancies(false);
+$("#collect").onclick = () => syncVacancies(true);
+
+$("#pause").onchange = async (e) => { await api("/api/pause", { paused: e.target.checked }); toast(e.target.checked ? "Поиск на паузе" : "Поиск продолжен"); load(); };
+document.querySelectorAll("#course li").forEach((li) => (li.querySelector("button").onclick = () => show(li.dataset.step)));
+show("intake");
+load();
+</script>
+</body>
+</html>
