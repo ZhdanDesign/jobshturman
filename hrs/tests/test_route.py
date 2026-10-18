@@ -49,7 +49,7 @@ def keys(tmp_path, monkeypatch):
     monkeypatch.setenv("HRS_BUNDLE_PUBKEYS", generate_signing_key(settings.signing_key))
     client = TestClient(create_app(settings))
     _, data = bundle.build(LIBRARY, {"telegram_channels.csv": CHANNELS}, version="route.1")
-    client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, headers=ADMIN).raise_for_status()
+    client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, data={"note": "тест"}, headers=ADMIN).raise_for_status()
     if sys.platform == "darwin":
         chain = tmp_path / "route.keychain-db"
         subprocess.run(["security", "create-keychain", "-p", "route", str(chain)], check=True)

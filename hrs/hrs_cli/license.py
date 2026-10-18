@@ -244,6 +244,37 @@ def sync(state: dict | None = None, http: httpx.Client | None = None) -> dict:
     return view()
 
 
+def update(accept: bool = False, http: httpx.Client | None = None) -> dict:
+    """A newer methodology is installed only after the person agrees: without accept, show what changed
+    (and mark an automatic update as told); with accept, move the key to the offered version and download it."""
+    state = load()
+    if not state:
+        raise DomainError("no_license", "Ключ не введён: hrs login <ключ>")
+    refresh(force=True, http=http)
+    state = load()
+    offer = (state.get("status") or {}).get("update_available")
+    if not accept:
+        news = (state.get("status") or {}).get("auto_updated")
+        if news and state.get("news_seen") != news["to"]:
+            state["news_seen"] = news["to"]
+            save(state)
+        return view() | ({} if offer or news else {"message": "Новых версий методики нет."})
+    if not offer:
+        raise DomainError("no_update", "Новых версий методики нет: обновлять нечего")
+    with _network(state["server"]), _client(state["server"], http) as client:
+        resp = client.post("v1/bundle/accept", json={"version": offer["version"]}, headers=_headers(state["token"]))
+        if resp.status_code != 200:
+            raise _error(resp)
+        state.update(status=resp.json(), checked_at=iso(now()))
+        save(state)
+        sync(state, client)
+    return view() | {"message": f"Методика обновлена до версии {offer['version']}."}
+
+
+def _changes(items: list[dict]) -> str:
+    return "\n".join(f"- {c['version']}: {c.get('note') or 'без описания'}" for c in items)
+
+
 def verify(data: bytes, signature: str) -> None:
     keys = public_keys()
     if not keys:
@@ -296,6 +327,16 @@ def view() -> dict:
     out |= {"days_left": max((expires - now()).days, 0) if expires else None, "methodology": has_bundle}
     if status.get("hrs_update"):
         out["hrs_update"] = status["hrs_update"]
+    offer, news = status.get("update_available"), status.get("auto_updated")
+    if offer:
+        out["methodology_update"] = offer | {
+            "message": f"Вышла новая версия методики {offer['version']}. Что изменилось:\n{_changes(offer['changes'])}\n"
+                       "Обновить? После «да»: hrs update --yes (агенту: methodology_update с accept=true). "
+                       "До согласия работа идёт по текущей версии."}
+    if news and state.get("news_seen") != news["to"]:
+        out["methodology_updated"] = news | {
+            "message": f"Методика обновлена до версии {news['to']} без вопроса: в ней важное исправление. "
+                       f"Что изменилось:\n{_changes(news['changes'])}"}
     if not has_bundle:
         out["message"] = "Методика не скачана: выполните hrs sync."
     if expires and expires - now() <= WARN_BEFORE:

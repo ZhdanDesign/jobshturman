@@ -58,7 +58,8 @@ def auth(token):
 
 def publish(client, library):
     _, data = bundle.build(library, version="0.4.0.test")
-    r = client.post("/v1/admin/bundles", files={"file": ("b.zip", data, "application/zip")}, headers=ADMIN)
+    r = client.post("/v1/admin/bundles", files={"file": ("b.zip", data, "application/zip")},
+                    data={"note": "первая версия"}, headers=ADMIN)
     assert r.status_code == 201, r.text
     return data
 

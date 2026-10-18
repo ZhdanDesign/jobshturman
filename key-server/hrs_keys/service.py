@@ -25,6 +25,8 @@ TOKEN_TTL = timedelta(hours=24)
 WARN_BEFORE = timedelta(days=1)
 KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I
 CHANNELS = ("stable", "test")
+CONSENT_HRS = "0.4.0"
+NOTE_MAX = 1000
 HRS_UPDATE = ("Вышла новая версия методики, но её читает только новый JobShturman. Обновите программу: "
               "curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh")
 
@@ -35,6 +37,11 @@ def version_tuple(v: str | None) -> tuple:
         digits = "".join(ch for ch in part if ch.isdigit())
         out.append(int(digits or 0))
     return tuple(out)
+
+
+def consents(client: str | None) -> bool:
+    """hrs from CONSENT_HRS on keeps the version it has and asks the person before taking a newer one."""
+    return client is not None and version_tuple(client) >= version_tuple(CONSENT_HRS)
 
 
 def readable(min_hrs: str | None, client: str | None) -> bool:
@@ -127,6 +134,17 @@ class KeyServer:
         self.bundles = settings.data / "bundles"
         self.bundles.mkdir(parents=True, exist_ok=True)
         self.library = library.Library(self.db, settings.data / "library")
+        self._pin_existing()
+
+    def _pin_existing(self):
+        """Keys in use before versions were pinned keep the version they last downloaded, so a version
+        published after the update reaches nobody silently."""
+        with self._tx() as c:
+            for r in c.execute("SELECT k.id, (SELECT e.detail FROM events e WHERE e.key_id = k.id AND e.kind = 'download'"
+                               " ORDER BY e.at DESC, e.id DESC LIMIT 1) AS got FROM keys k"
+                               " WHERE k.pinned_version IS NULL").fetchall():
+                if r["got"] and self._bundle_row(c, r["got"]):
+                    self._pin(c, r["id"], r["got"])
 
     def _tx(self):
         return self.db.tx(keep_on=KeyServerError)
@@ -184,7 +202,7 @@ class KeyServer:
         expires = parse(row["expires_at"])
         left = expires - now()
         tariff = c.execute("SELECT id, title FROM tariffs WHERE id = ?", (row["tariff_id"],)).fetchone()
-        picked, update = self._pick(c, row["channel"], client)
+        picked, update, offer = self._serve(c, row, client)
         latest = {"version": picked["version"], "sha256": picked["sha256"]} if picked else None
         expiring = left <= WARN_BEFORE
         return {
@@ -196,7 +214,52 @@ class KeyServer:
             "bundle": latest,
             "hrs_update": HRS_UPDATE if update else None,
             "watermark": watermark.key_id(row["key_hash"]),
-        }
+        } | offer
+
+    def _bundle_row(self, c, version: str | None):
+        return c.execute("SELECT rowid AS pos, * FROM bundles WHERE version = ?", (version,)).fetchone() \
+            if version else None
+
+    def _pin(self, c, key_id: str, version: str, auto: dict | None = None):
+        c.execute("UPDATE keys SET pinned_version = ?, pin_auto = ? WHERE id = ?",
+                  (version, json.dumps(auto, ensure_ascii=False) if auto else None, key_id))
+
+    def _changes(self, c, after, upto) -> list[dict]:
+        """What changed in the versions published after `after` up to `upto`, oldest first."""
+        return [{"version": r["version"], "published_at": r["published_at"], "note": r["note"],
+                 "important": bool(r["important"])}
+                for r in c.execute("SELECT * FROM bundles WHERE (published_at, rowid) > (?, ?)"
+                                   " AND (published_at, rowid) <= (?, ?) ORDER BY published_at, rowid",
+                                   (after["published_at"], after["pos"], upto["published_at"], upto["pos"]))]
+
+    def _serve(self, c, row, client: str | None):
+        """The bundle this key gets now: (row, hrs_update_needed, what to tell the person).
+        Old hrs gets the channel's version as before, and the key is pinned to it. hrs 0.4.0+ keeps the
+        pinned version: a newer one is offered with its changes, an important one is installed and
+        explained, and a rollback of the channel to an older version takes the key back too."""
+        offered, update = self._pick(c, row["channel"], client)
+        if not consents(client):
+            if offered and offered["version"] != row["pinned_version"]:
+                self._pin(c, row["id"], offered["version"])
+            return offered, update, {}
+        pinned = self._bundle_row(c, row["pinned_version"])
+        if offered is None:
+            return (pinned if pinned and readable(pinned["min_hrs"], client) else None), update, {}
+        if pinned is None or not readable(pinned["min_hrs"], client):
+            self._pin(c, row["id"], offered["version"])
+            return offered, update, {}
+        if pinned["version"] == offered["version"]:
+            return pinned, update, ({"auto_updated": json.loads(row["pin_auto"])} if row["pin_auto"] else {})
+        new = self._bundle_row(c, offered["version"])
+        if (new["published_at"], new["pos"]) < (pinned["published_at"], pinned["pos"]):
+            self._pin(c, row["id"], offered["version"])
+            return offered, update, {}
+        changes = self._changes(c, pinned, new)
+        if any(ch["important"] for ch in changes):
+            auto = {"from": pinned["version"], "to": new["version"], "at": iso(now()), "changes": changes}
+            self._pin(c, row["id"], new["version"], auto)
+            return offered, update, {"auto_updated": auto}
+        return pinned, update, {"update_available": {"version": new["version"], "changes": changes}}
 
     def _row_by_token(self, c, token):
         data = self._read_token(token)
@@ -247,11 +310,25 @@ class KeyServer:
         with self._tx() as c:
             row, _ = self._row_by_token(c, token)
             self._check_usable(c, row)
-            latest, _ = self._pick(c, row["channel"], client)
+            latest, _, _ = self._serve(c, row, client)
             if latest is None:
                 raise KeyServerError("no_bundle", "Методика ещё не опубликована", 404)
             self._log(c, row["id"], "download", latest["version"])
             return dict(latest), (self.bundles / f"{latest['version']}.zip").read_bytes()
+
+    def accept(self, token: str, version: str, client: str | None = None) -> dict:
+        """The person agreed to the offered version: the key moves to it, hrs downloads it next."""
+        with self._tx() as c:
+            row, _ = self._row_by_token(c, token)
+            self._check_usable(c, row)
+            offered, _ = self._pick(c, row["channel"], client)
+            if offered is None or offered["version"] != version:
+                raise KeyServerError("not_offered", "Эта версия методики сейчас не предлагается: проверьте ключ "
+                                     "ещё раз (hrs sync)", 409)
+            self._pin(c, row["id"], version)
+            self._log(c, row["id"], "check", f"accept {version}")
+            row = c.execute("SELECT * FROM keys WHERE id = ?", (row["id"],)).fetchone()
+            return self._status(c, row, client)
 
     # --- admin ---
 
@@ -299,7 +376,7 @@ class KeyServer:
         last = c.execute("SELECT max(at) FROM events WHERE key_id = ? AND kind IN ('check', 'download', 'activate')",
                          (key_id,)).fetchone()[0]
         counts = dict(c.execute("SELECT kind, count(*) FROM events WHERE key_id = ? GROUP BY kind", (key_id,)).fetchall())
-        view = {k: row[k] for k in row.keys() if k != "key_hash"}  # noqa: SIM118 (sqlite3.Row)
+        view = {k: row[k] for k in row.keys() if k not in ("key_hash", "pin_auto")}  # noqa: SIM118 (sqlite3.Row)
         if row["revoked_at"]:
             state = "revoked"
         elif parse(row["expires_at"]) <= now():
@@ -397,10 +474,22 @@ class KeyServer:
     def public_key(self) -> str:
         return public_key_b64(self._signer())
 
+    @staticmethod
+    def _note(note: str | None) -> str:
+        note = (note or "").strip()
+        if not note:
+            raise KeyServerError("note_required", "Напишите коротко, что изменилось в этой версии: "
+                                 "это покажут людям, когда им предложат обновиться")
+        if len(note) > NOTE_MAX:
+            raise KeyServerError("invalid_request", f"«Что изменилось»: не длиннее {NOTE_MAX} знаков")
+        return note
+
     def publish(self, data: bytes, channel: str | None = "stable", revision: int | None = None,
-                note: str | None = None) -> dict:
+                note: str | None = None, important: bool = False) -> dict:
         """Publish a bundle built by `hrs-keys bundle build` or from the draft; its version comes from
-        bundle.json inside. channel: who gets it now (stable: everyone, test: test keys); None: nobody yet."""
+        bundle.json inside. channel: who gets it now (stable: everyone, test: test keys); None: nobody yet.
+        note (required): what changed, shown to people; important: installed without asking (hrs 0.4.0+)."""
+        note = self._note(note)
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 meta = json.loads(z.read("bundle.json"))
@@ -417,9 +506,9 @@ class KeyServer:
                 raise KeyServerError("bundle_exists", f"Версия {version} уже опубликована", 409)
             (self.bundles / f"{version}.zip").write_bytes(data)
             c.execute("INSERT INTO bundles (version, sha256, size, signature, published_at, format, min_hrs, revision,"
-                      " note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      " note, important) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       (version, hashlib.sha256(data).hexdigest(), len(data), signature, iso(now()),
-                       int(meta.get("format") or 1), meta.get("min_hrs"), revision, (note or "")[:200] or None))
+                       int(meta.get("format") or 1), meta.get("min_hrs"), revision, note, int(bool(important))))
             self._log(c, None, "admin", f"publish {version}" + (f" to {channel}" if channel else ""))
             if channel:
                 self._set_current(c, version, channel)
@@ -446,6 +535,8 @@ class KeyServer:
         row = dict(c.execute("SELECT * FROM bundles WHERE version = ?", (version,)).fetchone())
         row["channels"] = [r[0] for r in c.execute("SELECT channel FROM current_bundle WHERE version = ?"
                                                     " ORDER BY channel", (version,))]
+        row["important"] = bool(row["important"])
+        row["keys"] = c.execute("SELECT count(*) FROM keys WHERE pinned_version = ?", (version,)).fetchone()[0]
         return row
 
     def bundle_list(self) -> list[dict]:
@@ -621,8 +712,9 @@ class KeyServer:
     def draft_check(self) -> dict:
         return self._lib(lambda c: self._check(self.library.files(c)))
 
-    def draft_publish(self, channel: str, by: str, note: str | None = None) -> dict:
+    def draft_publish(self, channel: str, by: str, note: str | None = None, important: bool = False) -> dict:
         """Check the draft, build the bundle from its newest revision, sign and publish it."""
+        note = self._note(note)
         def snapshot(c):
             head = self.library.head(c)
             if head is None:
@@ -640,7 +732,7 @@ class KeyServer:
                 raise KeyServerError("bundle_exists", f"Этот черновик уже опубликован как {version}: сделайте его "
                                      "текущим для нужного канала", 409)
         _, data = bundles_mod.build_files(files, version)
-        out = self.publish(data, channel=channel, revision=head["id"], note=note or f"черновик {head['id']} ({by})")
+        out = self.publish(data, channel=channel, revision=head["id"], note=note, important=important)
         return out | {"check": report}
 
     def draft_export(self, revision: int | None = None) -> bytes:

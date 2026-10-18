@@ -9,7 +9,7 @@
   hrs-keys revoke <key_id> --reason refund|violation|reissue|other
   hrs-keys restore <key_id> | reset-devices <key_id>
   hrs-keys bundle build <library_dir> <out.zip> [--include DEST=SRC ...]
-  hrs-keys bundle publish <bundle.zip>
+  hrs-keys bundle publish <bundle.zip> --note «что изменилось» [--important]
   hrs-keys watermark decode <file>           whose key a copied methodology text came from
 
 Settings come from the environment: HRS_KEYS_DATA, HRS_KEYS_SECRET, HRS_KEYS_ADMIN_TOKEN, HRS_KEYS_METHODOLOGIST_TOKEN,
@@ -63,6 +63,8 @@ def main(argv=None) -> int:
     b.add_argument("--version")
     b = bsub.add_parser("publish")
     b.add_argument("file")
+    b.add_argument("--note", required=True, help="что изменилось: это увидят люди, когда им предложат обновиться")
+    b.add_argument("--important", action="store_true", help="поставить всем без вопроса, с этим объяснением")
     p = sub.add_parser("watermark")
     wsub = p.add_subparsers(dest="watermark_cmd", required=True)
     wsub.add_parser("decode").add_argument("file")
@@ -108,7 +110,7 @@ def main(argv=None) -> int:
         elif args.cmd == "reset-devices":
             _print(ks.reset_devices(args.key_id))
         elif args.cmd == "bundle":
-            _print(ks.publish(Path(args.file).read_bytes()))
+            _print(ks.publish(Path(args.file).read_bytes(), note=args.note, important=args.important))
         elif args.cmd == "watermark":
             found = ks.find_watermark(Path(args.file).read_text(encoding="utf-8"))
             _print(found)

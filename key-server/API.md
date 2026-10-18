@@ -9,9 +9,12 @@
 | `POST /v1/activate` | `{"key", "install_id", "client"}` | `token`, `token_expires_at` (сутки, не дольше срока ключа) и статус |
 | `GET /v1/status` | `Authorization: Bearer <token>` | статус |
 | `GET /v1/bundle/latest` | `Authorization: Bearer <token>` | zip методики; заголовки `X-Bundle-Version`, `X-Bundle-Sha256`, `X-Bundle-Signature` (Ed25519, base64, подпись всего zip) |
+| `POST /v1/bundle/accept` | `Authorization: Bearer <token>`, `{"version"}` | статус; человек согласился на предложенную версию, ключ переходит на неё, `hrs` скачивает её следующим запросом. `not_offered` 409, если эта версия сейчас не предлагается |
 | `GET /v1/health` | — | `{"ok": true}` |
 
 Клиент передаёт свою версию в заголовке `X-Hrs-Version` (в `activate`, `status`, `bundle/latest`). Сервер отдаёт текущую версию методики канала ключа, если этот `hrs` её читает; иначе последнюю, которую он читает, и в статусе появляется `hrs_update` — текст с командой обновления. Запрос без заголовка считается запросом самого старого `hrs`.
+
+Обновление по согласию (`hrs` от 0.4.0). Каждый ключ закреплён за своей версией методики (`pinned_version`), и `status` с `bundle/latest` отдают её, даже когда каналу выдаётся более новая. Тогда в статусе есть `update_available {version, changes}`: `changes` — список `{version, published_at, note, important}` от закреплённой версии до предложенной. Ключ переходит на новую версию только после `POST /v1/bundle/accept`. Если среди новых версий есть отмеченная «важное», ключ переходит сам, а в статусе появляется `auto_updated {from, to, at, changes}`: его нужно один раз показать человеку. Если канал откатили на более старую версию, ключ переходит на неё сам. Старый `hrs` (ниже 0.4.0 или без заголовка) получает версию канала, как раньше, и ключ закрепляется за тем, что он получил. При первой выкладке ключи в работе закрепляются за версией, которую скачали последней.
 
 Статус: `key_hint` (первые 4 знака ключа), `tariff {id, title}`, `expires_at`, `days_left`, `state` (`active` или `expiring` — меньше суток до конца), `warning` (текст со ссылкой на продление или `null`), `renew_url`, `bundle {version, sha256}`, `hrs_update` (или `null`), `watermark` (8 hex-знаков: id водяного знака ключа, первые знаки sha256 от хэша ключа; hrs вписывает его в выданные тексты методики).
 
@@ -36,8 +39,8 @@
 | `DELETE /v1/admin/keys/{id}/devices/{install}` | — | ключ; отвязано одно устройство по 8 знакам из `devices[].install`. `not_found` 404, если такого нет; `ambiguous_device` 409, если префикс подходит к нескольким |
 | `GET /v1/admin/keys/{id}/events?limit=100` | — | последние события ключа, новые сверху: `[{kind, detail, at}]`; `kind` — `activate`, `check`, `download`, `denied` или `admin`; `limit` от 1 до 1000 |
 | `POST /v1/admin/keys/{id}/channel` | `{"channel": "test" \| "stable"}` | ключ; ключ канала `test` получает версии «на проверку» раньше всех |
-| `GET /v1/admin/bundles` | — | опубликованные версии методики, у каждой `channels` — каким каналам она сейчас выдаётся |
-| `POST /v1/admin/bundles` | multipart, поле `file` — zip от `hrs-keys bundle build` | версия: `version`, `sha256`, `size`, `signature`, `published_at`, `format`, `min_hrs`, `revision`, `note`, `channels`; сразу становится текущей для всех |
+| `GET /v1/admin/bundles` | — | опубликованные версии методики, у каждой `channels` — каким каналам она сейчас выдаётся, `note` — что изменилось, `important`, `keys` — сколько ключей на ней |
+| `POST /v1/admin/bundles` | multipart: `file` — zip от `hrs-keys bundle build`, `note` — что изменилось (обязательно, до 1000 знаков), `important` — `true`, чтобы версия встала без вопроса | версия: `version`, `sha256`, `size`, `signature`, `published_at`, `format`, `min_hrs`, `revision`, `note`, `important`, `channels`, `keys` (сколько ключей на ней); сразу становится доступной всем. Без `note` — `note_required` 400 |
 | `POST /v1/admin/bundles/{version}/current` | `{"channel": "test" \| "stable"}` | версия; выдать её каналу: перевести проверенную версию всем или откатиться. `stable` переключает и `test` |
 | `GET /v1/admin/signing-key` | — | `public_key` для `hrs` |
 
@@ -58,7 +61,7 @@
 | `GET /v1/admin/methodology/revisions/{id}/diff?against=` | — | `[{path, change: added \| removed \| changed, before, after}]` |
 | `POST /v1/admin/methodology/revisions/{id}/restore` | — | новая версия черновика с файлами версии `id` |
 | `POST /v1/admin/methodology/check` | — | `{ok, errors, findings, stages}` |
-| `POST /v1/admin/methodology/publish` | `{channel: "test" \| "stable", note}` | опубликованная версия (`{version}` = `<версия манифеста>.r<номер версии черновика>`) и `check`; `check_failed` 422, если есть ошибки |
+| `POST /v1/admin/methodology/publish` | `{channel: "test" \| "stable", note, important}`; `note` обязателен | опубликованная версия (`{version}` = `<версия манифеста>.r<номер версии черновика>`) и `check`; `check_failed` 422, если есть ошибки |
 | `GET /v1/admin/methodology/export?revision=` | — | zip черновика |
 
 Тариф: `id` (`self`, `guided`, `experts`), `title`, `price_rub_from`, `price_rub_to`, `months`, `device_limit`, `active` (0/1).

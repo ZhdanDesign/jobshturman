@@ -8,6 +8,7 @@
   hrs login <key> [--server URL]   enter the access key and download the methodology
   hrs sync                         check the key and download a newer methodology
   hrs license                      key state: tariff, end date, renewal link
+  hrs update [--yes]               what changed in a newer methodology; --yes installs it (only with the person's consent)
   hrs stage <n>                    procedure of one methodology stage (number or id), never the whole bundle
   hrs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
   hrs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
@@ -55,6 +56,8 @@ def main(argv=None) -> int:
     p.add_argument("--server", help=f"адрес сервера ключей (по умолчанию сервер {PRODUCT_NAME})")
     sub.add_parser("sync", help="проверить ключ и скачать новую методику")
     sub.add_parser("license", help="состояние ключа")
+    p = sub.add_parser("update", help="новая версия методики: что изменилось; --yes — перейти на неё")
+    p.add_argument("--yes", action="store_true", help="перейти на новую версию (с согласия человека)")
     p = sub.add_parser("stage", help="процедура одного этапа методики")
     p.add_argument("stage_id", help="номер этапа (с 0) или его id")
     p = sub.add_parser("selftest", help="проверка пакета методики: все этапы манифеста, выдача, ссылки, водяной знак")
@@ -103,13 +106,15 @@ def main(argv=None) -> int:
             return 1
         return 0
 
-    if args.cmd in ("login", "sync", "license"):
+    if args.cmd in ("login", "sync", "license", "update"):
         from . import license
         try:
             if args.cmd == "login":
                 result = license.login(args.key, args.server)
             elif args.cmd == "sync":
                 result = license.sync()
+            elif args.cmd == "update":
+                result = license.update(accept=args.yes)
             else:
                 result = license.refresh(force=True)
         except DomainError as exc:

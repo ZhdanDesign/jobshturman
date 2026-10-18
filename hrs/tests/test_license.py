@@ -53,7 +53,7 @@ def keys(tmp_path, monkeypatch):
     (lib / "agent" / "genesis.md").write_text(RULES, encoding="utf-8")
     (lib / "library_manifest.json").write_text(json.dumps({"version": "0.4.0"}), encoding="utf-8")
     _, data = bundle.build(lib, version="0.4.0.t1")
-    client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, headers=ADMIN).raise_for_status()
+    client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, data={"note": "тест"}, headers=ADMIN).raise_for_status()
     return client
 
 
@@ -260,3 +260,38 @@ def test_an_old_server_address_moves_to_the_new_one(keys):
                                     encoding="utf-8")
     assert license.load()["server"] == license.DEFAULT_SERVER == "https://tools.owai.ru/jobshturman/keys"
     assert json.loads(license.state_file().read_text(encoding="utf-8"))["server"] == license.DEFAULT_SERVER
+
+
+def publish_next(keys, tmp_path, version, note, important=False):
+    _, data = bundle.build(tmp_path / "library", version=version)
+    keys.post("/v1/admin/bundles", files={"file": ("b.zip", data)},
+              data={"note": note, "important": str(important).lower()}, headers=ADMIN).raise_for_status()
+
+
+def test_a_new_methodology_is_installed_only_after_the_person_agrees(keys, tmp_path, capsys):
+    license.login(issue(keys)["key"], http=keys)
+    publish_next(keys, tmp_path, "0.4.0.t2", "Новый этап про переговоры")
+    out = license.refresh(force=True, http=keys)
+    assert out["bundle_version"] == "0.4.0.t1"  # sync does not switch
+    offer = out["methodology_update"]
+    assert offer["version"] == "0.4.0.t2" and "Новый этап про переговоры" in offer["message"]
+    assert "Обновить?" in offer["message"]
+    assert license.update(http=keys)["bundle_version"] == "0.4.0.t1"  # showing is not agreeing
+
+    assert "methodology_update" in {t.name for t in asyncio.run(build().list_tools())}
+    done = license.update(accept=True, http=keys)
+    assert done["bundle_version"] == "0.4.0.t2" and "methodology_update" not in done
+    assert license.BundleLibrary().names()
+    with pytest.raises(DomainError) as exc:
+        license.update(accept=True, http=keys)
+    assert exc.value.code == "no_update"
+
+
+def test_an_important_methodology_installs_itself_and_is_explained_once(keys, tmp_path):
+    license.login(issue(keys)["key"], http=keys)
+    publish_next(keys, tmp_path, "0.4.0.t2", "Исправлена ошибка в отборе", important=True)
+    out = license.refresh(force=True, http=keys)
+    assert out["bundle_version"] == "0.4.0.t2"
+    assert "Исправлена ошибка в отборе" in out["methodology_updated"]["message"]
+    license.update(http=keys)  # the agent told the person
+    assert "methodology_updated" not in license.refresh(force=True, http=keys)

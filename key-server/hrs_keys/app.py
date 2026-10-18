@@ -6,7 +6,7 @@ Methodologist: /v1/admin/methodology/... and the bundle list with a token of HRS
 """
 import hmac
 
-from fastapi import Depends, FastAPI, Header, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, Form, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -39,7 +39,12 @@ class Channel(BaseModel):
 
 class Publish(BaseModel):
     channel: str = Field(pattern="^(stable|test)$")
-    note: str | None = Field(None, max_length=200)
+    note: str = Field(min_length=1, max_length=1000)  # what changed: people see it before they update
+    important: bool = False  # installed without asking, with the note as the explanation
+
+
+class Accept(BaseModel):
+    version: str = Field(min_length=1, max_length=80)
 
 
 class FileSave(BaseModel):
@@ -124,6 +129,10 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
             "X-Bundle-Version": meta["version"], "X-Bundle-Sha256": meta["sha256"],
             "X-Bundle-Signature": meta["signature"],
             "Content-Disposition": f'attachment; filename="methodology-{meta["version"]}.zip"'})
+
+    @app.post("/v1/bundle/accept")
+    def accept(body: Accept, authorization: str | None = Header(None), x_hrs_version: str | None = Header(None)):
+        return ks.accept(bearer(authorization), body.version, x_hrs_version)
 
     @app.get("/v1/health")
     def health():
@@ -251,7 +260,7 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
 
     @app.post(m + "/publish", status_code=201)
     def draft_publish(body: Publish, role: str = Depends(editor)):
-        return ks.draft_publish(body.channel, role, body.note)
+        return ks.draft_publish(body.channel, role, body.note, body.important)
 
     @app.get(m + "/export")
     def draft_export(revision: int | None = None, role: str = Depends(editor)):
@@ -259,8 +268,8 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
             "Content-Disposition": 'attachment; filename="methodology-draft.zip"'})
 
     @app.post("/v1/admin/bundles", dependencies=a, status_code=201)
-    async def publish(file: UploadFile):
-        return ks.publish(await file.read())
+    async def publish(file: UploadFile, note: str = Form(""), important: bool = Form(False)):
+        return ks.publish(await file.read(), note=note, important=important)
 
     @app.get("/v1/admin/signing-key", dependencies=a)
     def signing_key():

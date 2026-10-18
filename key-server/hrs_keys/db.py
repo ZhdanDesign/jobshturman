@@ -73,6 +73,10 @@ MIGRATIONS = [
     ("bundles", "min_hrs", "TEXT"),
     ("bundles", "revision", "INTEGER"),
     ("bundles", "note", "TEXT"),
+    # Each key stays on the version it has until its person agrees to a newer one (hrs 0.4.0+).
+    ("keys", "pinned_version", "TEXT"),
+    ("keys", "pin_auto", "TEXT"),  # JSON: an important version installed without asking, to tell the person
+    ("bundles", "important", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 # Prices are not final (owner decision 2026-10-10); the admin edits them.

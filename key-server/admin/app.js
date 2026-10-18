@@ -287,6 +287,7 @@ function renderDetail(key, events) {
     ["Скачиваний пакета", key.downloads], ["Отказов в доступе", key.denied],
     ["Номер заказа", key.order_ref ? `<code>${escapeHTML(key.order_ref)}</code>` : "—"],
     ["Версии методики", key.channel === "test" ? "Тестовые: получает новую версию первым" : "Обычные"],
+    ["Версия у пользователя", key.pinned_version ? `<span class="mono">v${escapeHTML(key.pinned_version)}</span>` : "Ещё не скачана"],
   ];
   if (key.revoked_at) facts.push(["Заблокирован", `${dateTime(key.revoked_at)} · ${reason}`]);
   const revoked = key.state === "revoked";
@@ -323,20 +324,22 @@ function renderTariffs() {
 
 function renderBundles(bundles) {
   const upload = data.role === "admin" ? `<section class="panel upload"><h2>Загрузить готовый пакет</h2>
-      <form id="bundle-form"><div class="field"><label for="bundle-file">Пакет zip</label><input id="bundle-file" name="file" type="file" accept=".zip,application/zip" required><small>Собирается командой <code>hrs-keys bundle build</code>; версия берётся из bundle.json внутри. Пакет сразу становится текущим для всех. Обычный путь — публикация из раздела «Методика».</small></div>
+      <form id="bundle-form"><div class="field"><label for="bundle-file">Пакет zip</label><input id="bundle-file" name="file" type="file" accept=".zip,application/zip" required><small>Собирается командой <code>hrs-keys bundle build</code>; версия берётся из bundle.json внутри. Пакет сразу становится доступным всем. Обычный путь — публикация из раздела «Методика».</small></div>
+        <div class="field"><label for="bundle-note">Что изменилось</label><textarea id="bundle-note" name="note" maxlength="1000" required placeholder="Например: новый этап про переговоры о зарплате, поправлены шаблоны писем"></textarea><small>Обязательно. Агент покажет это людям, когда предложит обновиться.</small></div>
+    <label class="check"><input type="checkbox" name="important"> Важное: поставить без вопроса</label><small class="muted">Для исправлений, без которых работать нельзя. Агент сам перейдёт на эту версию и объяснит человеку, что изменилось.</small>
         <p class="form-error" role="alert" hidden></p>
         <div class="dialog-actions"><button type="submit" class="button primary">${icon("upload")}Опубликовать</button></div></form></section>` : "";
   const target = (bundle, channel) => bundle.channels.includes(channel) ? "" : `<button class="button" data-action="set-current" data-version="${escapeHTML(bundle.version)}" data-channel="${channel}">${channel === "test" ? "Тестовым" : "Всем"}</button>`;
-  mainEl().innerHTML = `<div class="page-heading"><div><h1>Версии методики</h1><p>Тестовые ключи получают версию с меткой «Тестовые ключи», остальные — с меткой «Все пользователи». Откат — сделать текущей прежнюю версию.</p></div></div>
+  mainEl().innerHTML = `<div class="page-heading"><div><h1>Версии методики</h1><p>Версия с меткой «Тестовые ключи» предлагается тестовым ключам, с меткой «Все пользователи» — остальным. Люди переходят на неё, когда согласятся; «Важное» ставится само. Откат — сделать доступной прежнюю версию: ключи с более новой вернутся на неё.</p></div></div>
     ${upload}
     <div class="table-wrap" role="region" aria-label="Версии методики, прокручивается по горизонтали" tabindex="0">
-      <table class="bundles"><thead><tr><th scope="col">Версия</th><th scope="col">Опубликована</th><th scope="col">Комментарий</th><th scope="col">Размер</th><th scope="col">Сделать текущей</th></tr></thead><tbody>${bundles.map((bundle) => `<tr>
+      <table class="bundles"><thead><tr><th scope="col">Версия</th><th scope="col">Опубликована</th><th scope="col">Что изменилось</th><th scope="col">Ключей на версии</th><th scope="col">Размер</th><th scope="col">Сделать доступной</th></tr></thead><tbody>${bundles.map((bundle) => `<tr>
         <td><span class="mono">v${escapeHTML(bundle.version)}</span>${bundle.channels.map((channel) => ` <span class="badge ${channel === "stable" ? "active" : "expiring"}">${channelNames[channel]}</span>`).join("")}${bundle.min_hrs ? `<br><small class="muted">Нужен hrs ${escapeHTML(bundle.min_hrs)} или новее</small>` : ""}</td>
-        <td>${dateTime(bundle.published_at)}</td><td class="small">${escapeHTML(bundle.note || (bundle.revision ? `Черновик, версия ${bundle.revision}` : "—"))}</td>
+        <td>${dateTime(bundle.published_at)}</td><td class="small">${bundle.important ? '<span class="badge expiring">Важное</span> ' : ""}${escapeHTML(bundle.note || (bundle.revision ? `Черновик, версия ${bundle.revision}` : "—"))}</td><td>${bundle.keys ?? 0}</td>
         <td>${(bundle.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</td><td><div class="actions">${target(bundle, "test")}${target(bundle, "stable")}</div></td></tr>`).join("")}</tbody></table>
       ${bundles.length ? "" : '<div class="empty"><h3>Версий пока нет</h3><p class="muted">Опубликуйте методику из раздела «Методика».</p></div>'}
     </div>
-    <div class="info-note">${icon("info")}<p>«Всем» переводит на версию и тестовые ключи. Старые установки hrs, которым версия не подходит, получают последнюю подходящую и подсказку обновиться.</p></div>`;
+    <div class="info-note">${icon("info")}<p>«Всем» делает версию доступной и тестовым ключам. Старые установки hrs (до 0.4.0) не спрашивают и получают версию сразу; если она им не подходит — последнюю подходящую и подсказку обновить программу.</p></div>`;
 }
 
 // --- методика: черновик, маршрут, файлы, история ---
@@ -477,10 +480,11 @@ function showDiff(revision, changes) {
 function showPublish(channel) {
   const check = data.draft?.check;
   openDialog(channel === "test" ? "Опубликовать для тестовых ключей" : "Опубликовать для всех", channel === "test"
-    ? "Новую версию получат только ключи, отмеченные как тестовые. Остальные остаются на текущей."
-    : "Новую версию получат все пользователи при следующей проверке ключа. Откатить можно в разделе «Версии».", `<form id="publish-form" data-channel="${channel}">
+    ? "Версию предложат только тестовым ключам. Остальные остаются на своей."
+    : "Версию предложат всем: агент покажет, что изменилось, и спросит «Обновить?». Каждый остаётся на своей версии, пока не согласится. Откатить можно в разделе «Версии».", `<form id="publish-form" data-channel="${channel}">
     ${check && !check.ok ? '<p class="warning-note">В проверке есть ошибки: сервер не опубликует черновик, пока их не исправят.</p>' : ""}
-    <div class="field"><label for="publish-note">Комментарий к версии</label><input id="publish-note" name="note" maxlength="200" placeholder="Например, новый этап про зарплату" autofocus></div>
+    <div class="field"><label for="publish-note">Что изменилось</label><textarea id="publish-note" name="note" maxlength="1000" required placeholder="Например: новый этап про переговоры о зарплате, поправлены шаблоны писем"></textarea><small>Обязательно. Агент покажет это людям, когда предложит обновиться.</small></div>
+    <label class="check"><input type="checkbox" name="important"> Важное: поставить без вопроса</label><small class="muted">Для исправлений, без которых работать нельзя. Агент сам перейдёт на эту версию и объяснит человеку, что изменилось.</small>
     ${formActions("Опубликовать")}</form>`);
 }
 
@@ -720,7 +724,7 @@ async function submitMethodology(form) {
   let message;
   if (form.id === "publish-form") {
     const note = String(fields.get("note") || "").trim();
-    const published = await api("/methodology/publish", { method: "POST", json: { channel: form.dataset.channel, ...(note ? { note } : {}) } });
+    const published = await api("/methodology/publish", { method: "POST", json: { channel: form.dataset.channel, note, important: fields.get("important") === "on" } });
     message = `Опубликована версия v${published.version} для: ${form.dataset.channel === "test" ? "тестовых ключей" : "всех пользователей"}.`;
   } else if (form.id === "restore-form") {
     const head = await api(`/methodology/revisions/${encodeURIComponent(form.dataset.rev)}/restore`, { method: "POST" });

@@ -297,22 +297,24 @@ test("файл сохраняется с версией, которую откр
 });
 
 test("публикация тестовым и откат версии для всех", async () => {
-  const BUNDLES = [{ version: "0.5.0.r4", published_at: "2026-10-18T11:00:00Z", size: 2048, sha256: "a".repeat(64), channels: ["test"], min_hrs: "0.3.0", revision: 4, note: "новый этап" },
-    { version: "0.4.0.r2", published_at: "2026-10-17T11:00:00Z", size: 2048, sha256: "b".repeat(64), channels: ["stable"], min_hrs: null, revision: 2, note: null }];
+  const BUNDLES = [{ version: "0.5.0.r4", published_at: "2026-10-18T11:00:00Z", size: 2048, sha256: "a".repeat(64), channels: ["test"], min_hrs: "0.3.0", revision: 4, note: "новый этап", important: true, keys: 1 },
+    { version: "0.4.0.r2", published_at: "2026-10-17T11:00:00Z", size: 2048, sha256: "b".repeat(64), channels: ["stable"], min_hrs: null, revision: 2, note: null, important: false, keys: 7 }];
   const app = load({ token: "author", routes: { ...methodologyApi, "/bundles": [200, BUNDLES],
     "POST /methodology/publish": [201, { version: "0.5.0.r4", channels: ["test"] }], "POST /bundles/0.4.0.r2/current": [200, {}] } });
   app.context.window.location.hash = "#methodology";
   await app.run("render()");
-  await submitDialog(app, "publish-form", { note: "новый этап" }, { channel: "test" });
+  await submitDialog(app, "publish-form", { note: "новый этап", important: "on" }, { channel: "test" });
   app.context.window.location.hash = "#bundles";
   await app.run("render()");
   const table = app.element("main").innerHTML;
   assert.match(table, /v0\.5\.0\.r4[\s\S]*Тестовые ключи[\s\S]*Нужен hrs 0\.3\.0/);
+  assert.match(table, /Важное<\/span> новый этап<\/td><td>1<\/td>/);
+  assert.match(table, /<td>7<\/td>/);
   assert.doesNotMatch(table, /id="bundle-form"/);
   await app.element("app").listeners.click({ target: { closest: () => ({ dataset: { action: "set-current", version: "0.4.0.r2", channel: "stable" }, disabled: false }) } });
   await settle();
   assert.deepEqual(writes(app), [
-    ["POST", "/methodology/publish", { channel: "test", note: "новый этап" }],
+    ["POST", "/methodology/publish", { channel: "test", note: "новый этап", important: true }],
     ["POST", "/bundles/0.4.0.r2/current", { channel: "stable" }],
   ]);
 });

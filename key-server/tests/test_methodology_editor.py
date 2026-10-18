@@ -98,14 +98,14 @@ def test_an_old_library_enters_the_draft_with_its_route_written_out_and_a_main_p
     rules = server.get(M + "/file", params={"path": "agent/genesis.md"}, headers=AUTHOR).json()["text"]
     assert library.is_placeholder(rules)  # the server keeps no copy of the author's rules
     assert {e["code"] for e in draft["check"]["errors"]} == {"genesis_placeholder"}
-    refused = server.post(M + "/publish", json={"channel": "test"}, headers=AUTHOR)
+    refused = server.post(M + "/publish", json={"channel": "test", "note": "правка"}, headers=AUTHOR)
     assert refused.status_code == 422 and refused.json()["error"] == "check_failed"
 
 
 def test_a_library_without_rules_takes_them_from_the_published_version(server):
     upload(server)
     write_rules(server)
-    server.post(M + "/publish", json={"channel": "stable"}, headers=AUTHOR).raise_for_status()
+    server.post(M + "/publish", json={"channel": "stable", "note": "правка"}, headers=AUTHOR).raise_for_status()
     upload(server)  # the same old library again, still without agent/genesis.md
     rules = server.get(M + "/file", params={"path": "agent/genesis.md"}, headers=AUTHOR).json()["text"]
     assert rules == RULES
@@ -148,7 +148,7 @@ def test_the_author_adds_reorders_and_switches_off_stages(server):
     assert bad.status_code == 200  # saved as a draft…
     assert {e["code"] for e in server.post(M + "/check", headers=AUTHOR).json()["errors"]} == \
         {"duplicate_id", "unknown_step"}
-    refused = server.post(M + "/publish", json={"channel": "test"}, headers=AUTHOR)
+    refused = server.post(M + "/publish", json={"channel": "test", "note": "правка"}, headers=AUTHOR)
     assert refused.status_code == 422 and refused.json()["error"] == "check_failed"  # …but never published
 
 
@@ -162,7 +162,7 @@ def test_test_keys_get_a_version_first_then_everyone_and_a_rollback_is_one_call(
     opened = server.get(M + "/file", params={"path": "agent/genesis.md"}, headers=AUTHOR).json()
     server.put(M + "/file", json={"path": "agent/genesis.md", "text": "# Новые правила\n", "base_sha": opened["sha"]},
                headers=AUTHOR).raise_for_status()
-    second = server.post(M + "/publish", json={"channel": "test"}, headers=AUTHOR).json()
+    second = server.post(M + "/publish", json={"channel": "test", "note": "правка"}, headers=AUTHOR).json()
     v2 = second["version"]
     assert v2 != v1 and second["channels"] == ["test"]
     tester, everyone = key_for(server, "test"), key_for(server)
@@ -180,12 +180,12 @@ def test_test_keys_get_a_version_first_then_everyone_and_a_rollback_is_one_call(
 def test_old_hrs_keeps_the_last_version_it_can_read(server):
     upload(server)
     write_rules(server)
-    old = server.post(M + "/publish", json={"channel": "stable"}, headers=AUTHOR).json()["version"]
+    old = server.post(M + "/publish", json={"channel": "stable", "note": "правка"}, headers=AUTHOR).json()["version"]
     draft = server.get(M, headers=AUTHOR).json()
     stages = [{k: v for k, v in s.items() if k not in ("files", "position")} for s in draft["stages"]]
     server.put(M + "/route", json={"steps": draft["steps"], "stages": [stages[1], stages[0]]},
                headers=AUTHOR).raise_for_status()  # reordered: stage 0 is no longer in stage-00-…
-    new = server.post(M + "/publish", json={"channel": "stable"}, headers=AUTHOR).json()
+    new = server.post(M + "/publish", json={"channel": "stable", "note": "правка"}, headers=AUTHOR).json()
     assert new["min_hrs"] == bundle.ROUTE_HRS and new["format"] == 2
     key = key_for(server)
     assert bundle_of(server, key, NEW_HRS).headers["X-Bundle-Version"] == new["version"]
@@ -200,7 +200,7 @@ def test_import_the_published_version_and_export_the_draft(server):
     assert server.post(M + "/import-current", headers=AUTHOR).status_code == 404
     _, data = bundle.build_files({"library_manifest.json": b'{"version": "0.4.0"}',
                                   "skills/stage-00-intake-diagnostic/SKILL.md": b"# 00\n"}, version="0.4.0.p")
-    server.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, headers=ADMIN).raise_for_status()
+    server.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, data={"note": "архив"}, headers=ADMIN).raise_for_status()
     head = server.post(M + "/import-current", headers=AUTHOR).json()
     assert head["message"] == "Взята опубликованная версия 0.4.0.p"
     with zipfile.ZipFile(io.BytesIO(server.get(M + "/export", headers=AUTHOR).content)) as z:

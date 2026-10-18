@@ -43,7 +43,7 @@ def key_server(root: Path):
                         signing_key=root / "server" / "signing.pem", renew_url="https://example.test/renew")
     public = generate_signing_key(settings.signing_key)
     ks = KeyServer(settings)
-    ks.publish(bundle.build(LIBRARY, version="smoke.1")[1])
+    ks.publish(bundle.build(LIBRARY, version="smoke.1")[1], note="smoke")
     key = ks.issue("self", order_ref="agent smoke")["key"]
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host="127.0.0.1", port=0, log_level="warning"))
     threading.Thread(target=server.run, daemon=True).start()
