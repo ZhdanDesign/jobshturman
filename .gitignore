@@ -40,3 +40,6 @@ var/
 
 # Source materials archive (kept outside git)
 *.zip
+
+# Письма с ключами доступа: только на этом компьютере
+docs/letters/*.with-key.md
