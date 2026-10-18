@@ -80,6 +80,7 @@ def run_codex(root: Path, env: dict, prompt: str) -> subprocess.CompletedProcess
     for item in overrides:
         args += ["-c", item]
     return subprocess.run([*args, prompt], cwd=root / "work", capture_output=True, text=True, timeout=TIMEOUT,
+                          stdin=subprocess.DEVNULL,
                           check=False)
 
 
