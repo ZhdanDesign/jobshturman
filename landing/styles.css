@@ -417,8 +417,10 @@ main:focus { outline: none; }
 .allow { font: 600 .8125rem/1 var(--font); background: var(--you-solid); color: #fff; padding: .55em .85em; border-radius: 8px; }
 .msg.ok { color: #07633a; background: #e2f4ea; font-size: .8125rem; }
 .app-input { margin: 0 16px 16px; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 14px; border: 1px solid rgb(0 0 0 / 12%); color: #8a8a8a; font-size: .9375rem; background: #fff; }
-.app-input i { inline-size: 28px; block-size: 28px; border-radius: 50%; background: #111; }
-.app-claude .app-input i { background: #d97757; }
+/* Кнопка отправки как в приложениях: у Codex стрелка вверх в круге, у Claude стрелка ввода на оранжевом */
+.send { inline-size: 32px; block-size: 32px; display: grid; place-items: center; flex: none; border-radius: 50%; background: #111; color: #fff; }
+.send svg { inline-size: 18px; block-size: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.send-claude { border-radius: 10px; background: #d97757; }
 .js .app .msg { opacity: 0; translate: 0 8px; }
 .app.is-playing .msg { animation: msg-in .45s var(--ease) forwards; animation-delay: calc(var(--i) * 900ms + 200ms); }
 @keyframes msg-in { to { opacity: 1; translate: 0 0; } }
