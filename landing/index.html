@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="styles.css">
     <script>document.documentElement.classList.add("js");</script>
     <script src="main.js" defer></script>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
   </head>
   <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -28,7 +29,7 @@
   </svg>
     <a class="skip-link" href="#main">Перейти к содержимому</a>
     <header class="site-header">
-      <a class="wordmark" href="#top" aria-label="<span data-brand>JobShturman</span>, в начало страницы"><span class="wordmark-mark" aria-hidden="true"></span><span data-brand>JobShturman</span></a>
+      <a class="wordmark" href="#top" aria-label="JobShturman, в начало страницы" data-brand-attr="aria-label"><span class="wordmark-mark" aria-hidden="true"></span><span data-brand>JobShturman</span></a>
       <nav aria-label="Разделы страницы">
         <a href="#path">Как это работает</a>
         <a href="#how">Установка</a>
@@ -350,7 +351,25 @@
               </div>
             </div>
           </div>
-          <p class="note">Привычнее Терминал? Та же установка одной командой: <code>curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh</code>. Если что-то не пошло, поможем подключить агента.</p>
+          <div class="terminal-block">
+            <p class="terminal-lead">Привычнее Терминал? Та же установка одной командой:</p>
+            <div class="terminal copy">
+              <div class="terminal-bar" aria-hidden="true"><i></i><i></i><i></i><span>Терминал</span></div>
+              <div class="terminal-body">
+                <span class="terminal-prompt" aria-hidden="true">$</span>
+                <code>curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh</code>
+                <button type="button" class="button small copy-btn">Скопировать</button>
+              </div>
+            </div>
+          </div>
+          <div class="help-card">
+            <span class="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h3v5H5.5A1.5 1.5 0 0 1 4 17.5zM20 14h-3v5h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M18.5 19c0 1.6-1.8 2.5-4.5 2.5"/><circle cx="12.6" cy="21.5" r="1.1"/></svg></span>
+            <div class="help-text">
+              <p class="help-title">Что-то пошло не так?</p>
+              <p>Поможем подключить агента. Напишите нам, и мы вместе всё настроим.</p>
+            </div>
+            <a class="button small" href="https://t.me/Aleksei_Shturbin" data-link="author">Написать в Telegram</a>
+          </div>
         </div>
       </section>
 
@@ -620,6 +639,7 @@
         <li><a href="#tg-channel-todo" data-link="channel">Telegram-канал</a></li>
         <li><a href="#tg-bot-todo" data-link="bot">Бот поддержки</a></li>
         <li><a href="oferta/">Публичная оферта</a></li>
+        <li><a href="privacy/">Политика персональных данных</a></li>
       </ul>
     </footer>
   </body>
