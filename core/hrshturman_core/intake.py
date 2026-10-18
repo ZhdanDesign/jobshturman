@@ -1,6 +1,7 @@
 """Stage 00: initial diagnostic and request map (spec, «Начальная диагностика»)."""
 import re
 
+from .brand import PRODUCT_NAME
 from .common import DomainError, reject_secrets
 from .workspace import get_candidate
 
@@ -175,7 +176,7 @@ def _validate(pain_ids, custom_pain, skipped, situation):
 STORED_DATA_NOTICE = {
     "local": "Анкета хранится только в локальном workspace на этом компьютере. "
              "Если вы пользуетесь облачной моделью, ответы, которые вы ей показываете, обрабатывает её провайдер.",
-    "service": "Анкета хранится в вашем аккаунте сервиса HR Штурман. "
+    "service": f"Анкета хранится в вашем аккаунте сервиса {PRODUCT_NAME}. "
                "Кто и зачем получает эти сведения, описано в условиях обработки данных сервиса.",
 }
 

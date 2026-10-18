@@ -36,14 +36,14 @@ function load({ token = "", routes = {} } = {}) {
   const calls = [];
   const fetch = async (url, options) => {
     calls.push({ url, ...options, body: options.body && typeof options.body === "string" ? JSON.parse(options.body) : options.body });
-    const path = url.replace("https://tools.owai.ru/hrshturman/keys/v1/admin", "");
+    const path = url.replace("https://tools.owai.ru/jobshturman/keys/v1/admin", "");
     const route = routes[`${options.method} ${path}`] || routes[path];
     const [status, body] = typeof route === "function" ? route(options) : route || [404, { error: "not_found", message: "Нет такого ключа" }];
     return { status, ok: status < 400, json: async () => body };
   };
   const context = vm.createContext({
     window: {
-      location: { href: "https://tools.owai.ru/hrshturman/_/admin/", pathname: "/hrshturman/_/admin/", search: "", hash: "" }, addEventListener() {},
+      location: { href: "https://tools.owai.ru/jobshturman/_/admin/", pathname: "/jobshturman/_/admin/", search: "", hash: "" }, addEventListener() {},
       history: { replaceState(state, title, url) { context.window.location.hash = url.includes("#") ? url.slice(url.indexOf("#")) : ""; } },
       sessionStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: (k) => storage.delete(k) },
     },
@@ -78,9 +78,9 @@ test("продление сохраняет конец месяца, учиты�
   assert.equal(run('months(1) + "|" + months(3) + "|" + months(12) + "|" + months(21)'), "1 месяц|3 месяца|12 месяцев|21 месяц");
 });
 
-test("API ищется относительно /hrshturman/_/admin/ и получает токен из sessionStorage", async () => {
+test("API ищется относительно /jobshturman/_/admin/ и получает токен из sessionStorage", async () => {
   const app = load({ token: "t-123", routes: api });
-  assert.equal(app.run('apiUrl("/stats")'), "https://tools.owai.ru/hrshturman/keys/v1/admin/stats");
+  assert.equal(app.run('apiUrl("/stats")'), "https://tools.owai.ru/jobshturman/keys/v1/admin/stats");
   await settle();
   assert.deepEqual(app.calls.map((call) => call.url.split("/admin")[1]).sort(), ["/keys", "/stats", "/tariffs"]);
   assert.ok(app.calls.every((call) => call.headers.Authorization === "Bearer t-123" && call.method === "GET"));
@@ -93,7 +93,7 @@ test("без токена — экран входа; вход сохраняет
   const app = load({ routes: { ...api, "/stats": (options) => options.headers.Authorization === "Bearer good" ? [200, STATS] : [403, { error: "forbidden", message: "Неверный токен администратора" }] } });
   const screen = app.element("app").innerHTML;
   assert.match(screen, /id="login-form"/);
-  assert.doesNotMatch(screen, /HR Shturman|Сервер ключей|data-nav|Ручная выдача|номера заказов/);
+  assert.doesNotMatch(screen, /JobShturman|Сервер ключей|data-nav|Ручная выдача|номера заказов/);
   assert.equal(app.context.document.title, "Вход");
   assert.equal(app.calls.length, 0);
   const error = { hidden: true, textContent: "" };
@@ -106,7 +106,7 @@ test("без токена — экран входа; вход сохраняет
   await settle();
   assert.equal(app.storage.get("hrs-keys-admin-token"), "good");
   assert.match(app.element("app").innerHTML, /data-nav="keys"[\s\S]*data-action="logout"/);
-  assert.equal(app.context.document.title, "Сервер ключей · HR Shturman");
+  assert.equal(app.context.document.title, "Сервер ключей · JobShturman");
   assert.match(app.element("key-rows").innerHTML, /ORD-2026-1042/);
 });
 

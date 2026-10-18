@@ -2,6 +2,7 @@
 from hrs_collector import mcp_server as collector_mcp
 from hrs_collector.service import Collector
 from hrshturman_core import DomainError, Store
+from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_local import mcp_server as local_mcp
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -86,7 +87,7 @@ def build(settings=None, collector: Collector | None = None):
 
     @mcp.tool()
     def ui_open(view: str = "intake", external: bool = False) -> dict:
-        """Открыть страницу HR Штурман: view intake (анкета этапа 0) | progress (маршрут по этапам).
+        """Открыть страницу JobShturman: view intake (анкета этапа 0) | progress (маршрут по этапам).
         Возвращает одноразовую ссылку на 127.0.0.1. external=true открывает её в обычном браузере на этом компьютере;
         иначе открой ссылку своим встроенным браузером. Ссылку не пересылай: она действует один раз."""
         def go():
@@ -105,20 +106,20 @@ def build(settings=None, collector: Collector | None = None):
 
     @mcp.tool(meta=app_only)
     def ui_state() -> dict:
-        """Для страницы HR Штурман: анкета, вопросы блоков и маршрут."""
+        """Для страницы JobShturman: анкета, вопросы блоков и маршрут."""
         return domain(lambda: web.state(store, cid))
 
     @mcp.tool(meta=app_only)
     def ui_answer(block: str, answer: str | list[str | int] | dict[str, str]) -> dict:
-        """Для страницы HR Штурман: ответ кандидата на блок анкеты."""
+        """Для страницы JobShturman: ответ кандидата на блок анкеты."""
         return domain(lambda: web.answer(store, cid, block, answer))
 
     @mcp.tool(meta=app_only)
     def ui_confirm(expected_version: int) -> dict:
-        """Для страницы HR Штурман: кандидат нажал «Всё верно, подтверждаю»."""
+        """Для страницы JobShturman: кандидат нажал «Всё верно, подтверждаю»."""
         return domain(lambda: web.confirm(store, cid, expected_version))
 
-    @mcp.resource(APP_URI, name="hrshturman-app", title="HR Штурман", mime_type=APP_MIME,
+    @mcp.resource(APP_URI, name="hrshturman-app", title=PRODUCT_NAME, mime_type=APP_MIME,
                   meta={"ui": {"prefersBorder": True}})
     def app_page() -> str:
         return web.page()

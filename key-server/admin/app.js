@@ -1,6 +1,6 @@
 "use strict";
 
-// Админка открыта по /hrshturman/_/admin/, сервер ключей — /hrshturman/keys/ (см. key-server/API.md).
+// Админка открыта по /jobshturman/_/admin/, сервер ключей — /jobshturman/keys/ (см. key-server/API.md).
 const API_BASE = "../../keys/v1/admin";
 const TOKEN_KEY = "hrs-keys-admin-token";
 const root = document.getElementById("app");
@@ -19,9 +19,9 @@ let shellShown = false;
 const SHELL = `
   <a class="skip-link" href="#main">Перейти к содержимому</a>
   <aside class="sidebar">
-    <a class="brand" href="#keys" aria-label="HR Shturman — список ключей">
+    <a class="brand" href="#keys" aria-label="JobShturman — список ключей">
       <span class="brand-mark" aria-hidden="true">H</span>
-      <span><strong>HR Shturman</strong><small>Сервер ключей</small></span>
+      <span><strong>JobShturman</strong><small>Сервер ключей</small></span>
     </a>
     <div class="nav-label">Управление</div>
     <nav aria-label="Главная навигация">
@@ -43,7 +43,7 @@ const SHELL = `
   <div class="workspace">
     <header class="topbar"><span>Администрирование <span class="divider">/</span> <strong id="breadcrumb">Ключи</strong></span><span class="topbar-note">Ручная выдача после оплаты</span></header>
     <main id="main" tabindex="-1"></main>
-    <footer class="page-footer">HR Shturman <span>Только ключи, устройства и номера заказов</span></footer>
+    <footer class="page-footer">JobShturman <span>Только ключи, устройства и номера заказов</span></footer>
   </div>`;
 
 class AuthError extends Error {}
@@ -199,7 +199,7 @@ function setNav(page) {
   if (!shellShown) {
     root.innerHTML = SHELL;
     shellShown = true;
-    document.title = "Сервер ключей · HR Shturman";
+    document.title = "Сервер ключей · JobShturman";
   }
   document.getElementById("breadcrumb").textContent = { tariffs: "Тарифы", bundles: "Методика", key: "Карточка ключа", keys: "Ключи" }[page];
   document.querySelectorAll("[data-nav]").forEach((link) => {

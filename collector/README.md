@@ -1,6 +1,6 @@
 # hrs-collector
 
-Сборщик вакансий HR Shturman: HeadHunter, Telegram-каналы и LinkedIn за одной абстракцией адаптера. Одно ядро, три входа: HTTP API, MCP-сервер для агента и CLI. Контракт для других блоков описан в [CONTRACT.md](CONTRACT.md).
+Сборщик вакансий JobShturman: HeadHunter, Telegram-каналы и LinkedIn за одной абстракцией адаптера. Одно ядро, три входа: HTTP API, MCP-сервер для агента и CLI. Контракт для других блоков описан в [CONTRACT.md](CONTRACT.md).
 
 ## Быстрый старт
 

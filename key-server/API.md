@@ -1,6 +1,6 @@
 # API сервера ключей
 
-Базовый адрес: `https://tools.owai.ru/hrshturman/keys`. Все ответы JSON, ошибки — `{"error": "<код>", "message": "<текст для человека>"}`. Время — ISO 8601 в UTC с `Z`.
+Базовый адрес: `https://tools.owai.ru/jobshturman/keys`. Все ответы JSON, ошибки — `{"error": "<код>", "message": "<текст для человека>"}`. Время — ISO 8601 в UTC с `Z`.
 
 ## Клиент (`hrs`)
 

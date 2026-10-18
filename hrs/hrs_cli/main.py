@@ -17,6 +17,7 @@ import json
 import sys
 
 from hrshturman_core import DomainError
+from hrshturman_core.brand import PRODUCT_NAME
 
 from . import docs, paths
 
@@ -32,7 +33,7 @@ def main(argv=None) -> int:
         s = paths.settings()
         return collector_cli.main(["--data", str(paths.collector_dir()), "--candidate", s.candidate_id, *argv[1:]])
 
-    ap = argparse.ArgumentParser(prog="hrs", description="HR Shturman: локальный помощник поиска работы для кодового агента")
+    ap = argparse.ArgumentParser(prog="hrs", description=f"{PRODUCT_NAME}: локальный помощник поиска работы для кодового агента")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("serve", help="MCP-сервер для агента (stdio; --http для streamable HTTP на 127.0.0.1)")
     p.add_argument("--http", action="store_true")
@@ -48,7 +49,7 @@ def main(argv=None) -> int:
     p.add_argument("--from-plugin", action="store_true", help="навык в Claude Code уже даёт плагин")
     p = sub.add_parser("login", help="ввести ключ доступа и скачать методику")
     p.add_argument("key")
-    p.add_argument("--server", help="адрес сервера ключей (по умолчанию сервер HR Штурман)")
+    p.add_argument("--server", help=f"адрес сервера ключей (по умолчанию сервер {PRODUCT_NAME})")
     sub.add_parser("sync", help="проверить ключ и скачать новую методику")
     sub.add_parser("license", help="состояние ключа")
     p = sub.add_parser("stage", help="процедура одного этапа методики")

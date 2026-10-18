@@ -152,7 +152,7 @@ class HHApiAdapter(SourceAdapter):
             raise SourceError("not_configured", "hh_api needs credentials.hh.access_token")
         return {
             "Authorization": f"Bearer {creds.access_token.get_secret_value()}",
-            "HH-User-Agent": "HRShturman-collector/0.1",
+            "HH-User-Agent": "JobShturman-collector/0.1",
         }
 
     def check_config(self, spec: SourceSpec) -> None:

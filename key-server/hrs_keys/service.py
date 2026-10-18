@@ -46,7 +46,7 @@ class Settings:
             raise SystemExit("HRS_KEYS_SECRET: нужна случайная строка от 32 символов")
         return cls(data=data, secret=secret.encode(), admin_token=os.environ.get("HRS_KEYS_ADMIN_TOKEN") or None,
                    signing_key=Path(os.environ.get("HRS_KEYS_SIGNING_KEY") or data / "signing_key.pem"),
-                   renew_url=os.environ.get("HRS_KEYS_RENEW_URL", "https://tools.owai.ru/hrshturman/"))
+                   renew_url=os.environ.get("HRS_KEYS_RENEW_URL", "https://tools.owai.ru/jobshturman/"))
 
 
 def now() -> datetime:

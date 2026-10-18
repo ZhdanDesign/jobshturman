@@ -18,7 +18,7 @@ from .util import parse_dt
 
 
 INSTRUCTIONS = (
-    "Vacancy collector for HR Shturman. Sources: HeadHunter, Telegram channels, LinkedIn. "
+    "Vacancy collector for JobShturman. Sources: HeadHunter, Telegram channels, LinkedIn. "
     "Typical flow: list_sources -> run_collection -> search_vacancies -> get_vacancy. "
     "A source status of no_access or partial is not 'zero vacancies': report coverage honestly. "
     "Never treat a collected vacancy as permission to apply."

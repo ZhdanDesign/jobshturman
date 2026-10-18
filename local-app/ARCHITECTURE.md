@@ -1,4 +1,4 @@
-# Локальное приложение HR Shturman: архитектура и план
+# Локальное приложение JobShturman: архитектура и план
 
 Редакция 0.1, 9 октября 2026. Основание: ТЗ ред. 0.5 (`01 ТЗ метапроекта поиска работы.docx`), `references/contracts.md` v0.2, `runtime_constraints.md`, `product_update.md`, процедуры этапов 00–25, черновой `scripts/workflow.py`.
 

@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from hrshturman_core import DomainError, intake, resume
 from hrshturman_core import applications as apps
+from hrshturman_core.brand import PRODUCT_NAME
 
 from . import paths
 
@@ -41,7 +42,8 @@ STAGES = ["Диагностика", "Материалы об опыте", "Же�
 def page() -> str:
     """app.html with the design tokens inlined, so one file works as a web page and as an MCP App."""
     css = (STATIC / "tokens.css").read_text(encoding="utf-8")
-    return (STATIC / "app.html").read_text(encoding="utf-8").replace("/*TOKENS*/", css)
+    html = (STATIC / "app.html").read_text(encoding="utf-8").replace("/*TOKENS*/", css)
+    return html.replace("{{PRODUCT}}", PRODUCT_NAME)
 
 
 # --- settings: how the candidate wants to answer ---

@@ -1,4 +1,4 @@
-# hrs — HR Shturman для кодового агента
+# hrs — JobShturman для кодового агента
 
 Одна команда вместо трёх пакетов: локальный MCP-сервер (`local-app`), сборщик вакансий (`collector`) и чтение документов через MarkItDown. Ядро — `core`. Работает на macOS и Windows, данные не покидают компьютер. План: [PLAN-SKILL.md](../PLAN-SKILL.md), этапы S1–S2.
 

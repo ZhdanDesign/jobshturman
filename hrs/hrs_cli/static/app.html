@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>HR Штурман</title>
+<title>{{PRODUCT}}</title>
 <style>
 /*TOKENS*/
 :root[data-theme="light"] { color-scheme: light; }
@@ -96,7 +96,7 @@ li.active .t { font-weight: var(--font-weight-medium); }
 <body>
 <div class="wrap">
   <header>
-    <div class="brand">HR Штурман</div>
+    <div class="brand">{{PRODUCT}}</div>
     <nav class="tabs" role="tablist" aria-label="Разделы">
       <button role="tab" id="tab-intake" aria-selected="true" data-view="intake">Анкета</button>
       <button role="tab" id="tab-progress" aria-selected="false" data-view="progress">Маршрут</button>
@@ -292,8 +292,8 @@ window.addEventListener("hashchange", () => {
 (async function start() {
   try {
     if (inHost) {
-      const r = await rpc("ui/initialize", {protocolVersion: "2026-01-26", appInfo: {name: "HR Штурман", version: "1"},
-        clientInfo: {name: "HR Штурман", version: "1"}, appCapabilities: {}, capabilities: {}});
+      const r = await rpc("ui/initialize", {protocolVersion: "2026-01-26", appInfo: {name: "{{PRODUCT}}", version: "1"},
+        clientInfo: {name: "{{PRODUCT}}", version: "1"}, appCapabilities: {}, capabilities: {}});
       theme(r && r.hostContext && r.hostContext.theme);
       notify("ui/notifications/initialized", {});
     }

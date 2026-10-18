@@ -1,4 +1,4 @@
-# Сервер ключей HR Штурман
+# Сервер ключей JobShturman
 
 Выдаёт и проверяет ключи доступа, хранит тарифы и срок, считает активации и отдаёт подписанный пакет методики. Персональных данных не хранит: ключ лежит в виде HMAC-хэша, установка — хэшем случайного id, IP не пишется (`access_log` выключен). API — в [API.md](API.md).
 
@@ -29,4 +29,4 @@ cd key-server && uv run pytest -q
 
 ## Развёртывание
 
-`Dockerfile` и `compose.yaml` — для сервера Timeweb рядом с демо, порт `127.0.0.1:8098`, nginx отдаёт его по `/hrshturman/keys/`. Развёрнут: /opt/hrshturman-keys, compose-проект hrshturman-keys, nginx отдаёт /hrshturman/keys/.
+`Dockerfile` и `compose.yaml` — для сервера Timeweb рядом с демо, порт `127.0.0.1:8098`, nginx отдаёт его по `/jobshturman/keys/`. Развёрнут: /opt/hrshturman-keys, compose-проект hrshturman-keys, nginx отдаёт /jobshturman/keys/.

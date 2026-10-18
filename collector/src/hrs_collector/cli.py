@@ -33,7 +33,7 @@ def _print(obj) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="hrs-collector", description="HR Shturman vacancy collector")
+    ap = argparse.ArgumentParser(prog="hrs-collector", description="JobShturman vacancy collector")
     ap.add_argument("--data", type=Path, default=None, help="data dir (default $HRS_COLLECTOR_DATA or ~/.hrs-collector)")
     ap.add_argument("--candidate", default="default")
     sub = ap.add_subparsers(dest="cmd", required=True)

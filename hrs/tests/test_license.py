@@ -232,3 +232,12 @@ def test_cli_without_a_key(keys, capsys):
     assert json.loads(capsys.readouterr().out)["state"] == "none"
     assert main.main(["login", "HRS-AAAA-BBBB-CCCC-DDDD-EEEE", "--server", "http://127.0.0.1:9"]) == 1
     assert json.loads(capsys.readouterr().out)["error"] in ("server_error", "connection_error", "invalid_key")
+
+
+def test_an_old_server_address_moves_to_the_new_one(keys):
+    license.login(issue(keys)["key"], http=keys)
+    state = json.loads(license.state_file().read_text(encoding="utf-8"))
+    license.state_file().write_text(json.dumps(state | {"server": "https://tools.owai.ru/hrshturman/keys"}),
+                                    encoding="utf-8")
+    assert license.load()["server"] == license.DEFAULT_SERVER == "https://tools.owai.ru/jobshturman/keys"
+    assert json.loads(license.state_file().read_text(encoding="utf-8"))["server"] == license.DEFAULT_SERVER

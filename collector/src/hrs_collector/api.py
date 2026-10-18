@@ -68,7 +68,7 @@ class CredentialsBody(BaseModel):
 
 def create_app(collector: Collector | None = None) -> FastAPI:
     core = collector or Collector()
-    app = FastAPI(title="HR Shturman collector", version=__version__,
+    app = FastAPI(title="JobShturman collector", version=__version__,
                   description=f"Contract {CONTRACT_VERSION}. See collector/CONTRACT.md.")
 
     def auth(authorization: str | None = Header(None)) -> None:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# HR Shturman installer for macOS and Linux.
+# JobShturman installer for macOS and Linux.
 #
 #   sh bootstrap.sh [SOURCE]
 #
@@ -16,7 +16,7 @@ set -eu
 
 SKILL_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SOURCE=${1:-${HRS_SOURCE:-}}
-DEFAULT_SOURCE="https://github.com/ZhdanDesign/hrshturman/releases/latest/download/hrshturman-wheels.zip"
+DEFAULT_SOURCE="https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip"
 FROM_PLUGIN=""
 case "$SKILL_DIR" in */.claude/plugins/*) FROM_PLUGIN="--from-plugin" ;; esac
 

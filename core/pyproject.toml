@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hrshturman-core"
 version = "0.1.0"
-description = "HR Shturman domain core shared by the local app and the web service"
+description = "JobShturman domain core shared by the local app and the web service"
 requires-python = ">=3.11"
 dependencies = []
 

@@ -1,1 +1,1 @@
-"""HR Shturman key server."""
+"""JobShturman key server."""

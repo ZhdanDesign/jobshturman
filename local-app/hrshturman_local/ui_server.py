@@ -14,6 +14,7 @@ from pathlib import Path
 from hrshturman_core import DomainError, Store
 from hrshturman_core import applications as apps
 from hrshturman_core import intake, report, resume
+from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.workspace import create_candidate
 
 from . import collector_feed, config, render
@@ -158,11 +159,11 @@ def build_server(settings, port=8741):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="HR Shturman local UI")
+    parser = argparse.ArgumentParser(description=f"{PRODUCT_NAME} local UI")
     parser.add_argument("--port", type=int, default=8741)
     args = parser.parse_args(argv)
     server = build_server(config.load(), args.port)
-    print(f"HR Shturman: http://127.0.0.1:{args.port}")
+    print(f"{PRODUCT_NAME}: http://127.0.0.1:{args.port}")
     server.serve_forever()
 
 

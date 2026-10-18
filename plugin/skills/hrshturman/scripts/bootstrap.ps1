@@ -1,4 +1,4 @@
-﻿# HR Shturman installer for Windows.
+﻿# JobShturman installer for Windows.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File bootstrap.ps1 [SOURCE]
 #
@@ -45,7 +45,7 @@ function Install-Wheels($dir) {
 
 $Bin = (& uv tool dir --bin).Trim()
 $Hrs = Join-Path $Bin $(if ($IsLinux -or $IsMacOS) { 'hrs' } else { 'hrs.exe' })
-if (-not $Source -and -not (Test-Path $Hrs)) { $Source = 'https://github.com/ZhdanDesign/hrshturman/releases/latest/download/hrshturman-wheels.zip' }
+if (-not $Source -and -not (Test-Path $Hrs)) { $Source = 'https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip' }
 $Work = $null
 try {
     if ($Source) {

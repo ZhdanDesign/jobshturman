@@ -16,11 +16,12 @@ from pydantic import BaseModel, Field, create_model
 from hrshturman_core import DomainError, Store
 from hrshturman_core import applications as apps
 from hrshturman_core import checks, intake, report, resume
+from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.workspace import create_candidate
 
 from . import collector_feed, config, render
 
-INSTRUCTIONS = """HR Shturman: локальный учёт поиска работы кандидата по методике из 25 этапов.
+INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике из 25 этапов.
 Приложение хранит факты, резюме, карточки откликов и воронку; ты интервьюируешь, пишешь черновики и оцениваешь вакансии.
 Правила:
 - Начни с status_report: он показывает этап, следующий шаг и блокеры.
@@ -369,7 +370,7 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="HR Shturman local MCP server")
+    parser = argparse.ArgumentParser(description=f"{PRODUCT_NAME} local MCP server")
     parser.add_argument("--http", action="store_true", help="streamable HTTP instead of stdio")
     parser.add_argument("--port", type=int, default=8742)
     args = parser.parse_args(argv)

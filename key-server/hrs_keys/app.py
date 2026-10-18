@@ -47,7 +47,7 @@ class TariffPatch(BaseModel):
 
 def create_app(settings: Settings | None = None, admin_origins: list[str] | None = None) -> FastAPI:
     ks = KeyServer(settings or Settings.from_env())
-    app = FastAPI(title="HR Shturman keys", version="1", docs_url=None, redoc_url=None, openapi_url="/v1/openapi.json")
+    app = FastAPI(title="JobShturman keys", version="1", docs_url=None, redoc_url=None, openapi_url="/v1/openapi.json")
     app.state.ks = ks
     if admin_origins:
         app.add_middleware(CORSMiddleware, allow_origins=admin_origins, allow_methods=["*"],

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hrshturman"
 version = "0.1.0"
-description = "HR Shturman CLI: local MCP server, vacancy collector and document import for coding agents"
+description = "JobShturman CLI: local MCP server, vacancy collector and document import for coding agents"
 requires-python = ">=3.12"
 dependencies = [
     "hrshturman-core",

@@ -31,7 +31,7 @@ from hrs_keys.service import KeyServer, Settings, generate_signing_key
 HERE = Path(__file__).resolve().parent
 LIBRARY = HERE.parents[1] / "Метапроект_поиска_работы_—_ТЗ_и_библиотека" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
 HRS = Path(sys.executable).with_name("hrs")
-TASK = ("Это проверка HR Штурман. Сделай по порядку, ничего не спрашивая у меня: 1) license_status; "
+TASK = ("Это проверка JobShturman. Сделай по порядку, ничего не спрашивая у меня: 1) license_status; "
         "2) license_login с ключом {key}; 3) stage_procedure с stage_id=0, процитируй первую строку; "
         "4) ui_mode с mode=chat; 5) intake_ask с block=pains; если формы нет, сохрани ответ «1, 5» через intake_answer. "
         "В конце одной строкой: какие инструменты вызвал.")

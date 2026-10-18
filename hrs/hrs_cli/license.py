@@ -26,10 +26,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from hrshturman_core import DomainError
+from hrshturman_core.brand import PRODUCT_NAME
 
 from . import keystore, paths, watermark
 
-DEFAULT_SERVER = "https://tools.owai.ru/hrshturman/keys"
+DEFAULT_SERVER = "https://tools.owai.ru/jobshturman/keys"
+# Addresses older hrs wrote into license.json; read them as the current one.
+OLD_SERVERS = ("https://tools.owai.ru/hrshturman/keys",)
 # Public key of the production bundle signing key (hrs-keys signing-key on the server).
 PUBLIC_KEYS: tuple[str, ...] = ("g0+l6EZh3voBDLJApGDmDOIPlaE7gXG0leEo/HzJsZ4=",)
 CHECK_EVERY = timedelta(hours=24)
@@ -91,6 +94,9 @@ def load() -> dict | None:
         state = json.loads(state_file().read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
+    if state.get("server") in OLD_SERVERS:
+        state["server"] = DEFAULT_SERVER
+        save(state)
     if state.get("key"):
         save(state)
     else:
@@ -238,7 +244,7 @@ def verify(data: bytes, signature: str) -> None:
             return
         except (InvalidSignature, ValueError):
             continue
-    raise DomainError("bad_signature", "Подпись методики не сходится: файл не от сервера HR Штурман")
+    raise DomainError("bad_signature", f"Подпись методики не сходится: файл не от сервера {PRODUCT_NAME}")
 
 
 def view() -> dict:

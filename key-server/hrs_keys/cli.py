@@ -30,7 +30,7 @@ def _print(obj):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="hrs-keys", description="Сервер ключей HR Штурман")
+    ap = argparse.ArgumentParser(prog="hrs-keys", description="Сервер ключей JobShturman")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("serve")
     p.add_argument("--host", default="127.0.0.1")

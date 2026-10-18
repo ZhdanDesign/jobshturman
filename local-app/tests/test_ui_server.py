@@ -37,7 +37,7 @@ class UiServerTests(unittest.TestCase):
 
     def test_page_served(self):
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/") as res:
-            self.assertIn("HR Штурман", res.read().decode())
+            self.assertIn("JobShturman", res.read().decode())
 
     def test_foreign_host_and_form_posts_refused(self):
         self.assertEqual(self.call("/api/status", host="evil.example")[0], 403)
