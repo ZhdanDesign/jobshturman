@@ -206,3 +206,15 @@ def test_unbind_with_an_ambiguous_prefix_is_refused(server):
     r = server.delete(f"/v1/admin/keys/{key['id']}/devices/12345678", headers=ADMIN)
     assert (r.status_code, r.json()["error"]) == (409, "ambiguous_device")
     assert len(server.get(f"/v1/admin/keys/{key['id']}", headers=ADMIN).json()["devices"]) == 2
+
+
+def test_several_admin_tokens_each_revocable(tmp_path):
+    settings = Settings(data=tmp_path / "data", secret=b"s" * 40, admin_token="owner-token, second-token",
+                        signing_key=tmp_path / "data" / "signing.pem", renew_url="https://example.test/renew")
+    client = TestClient(create_app(settings))
+    for token in ("owner-token", "second-token"):
+        assert client.get("/v1/admin/stats", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    assert client.get("/v1/admin/stats", headers={"Authorization": "Bearer owner-token, second-token"}).status_code == 403
+    revoked = TestClient(create_app(Settings(data=tmp_path / "data", secret=b"s" * 40, admin_token="owner-token",
+                                             signing_key=tmp_path / "data" / "signing.pem", renew_url="x")))
+    assert revoked.get("/v1/admin/stats", headers={"Authorization": "Bearer second-token"}).status_code == 403

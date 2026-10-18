@@ -63,9 +63,12 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
             raise KeyServerError("unauthorized", "Нужен заголовок Authorization: Bearer ...", 401)
         return value.strip()
 
+    # HRS_KEYS_ADMIN_TOKEN may list several tokens, comma separated: one per admin, each revoked on its own.
+    admin_tokens = [t.strip() for t in (ks.s.admin_token or "").split(",") if t.strip()]
+
     def admin(authorization: str | None = Header(None)):
         token = bearer(authorization)
-        if not ks.s.admin_token or not hmac.compare_digest(token, ks.s.admin_token):
+        if not any(hmac.compare_digest(token, known) for known in admin_tokens):
             raise KeyServerError("forbidden", "Неверный токен администратора", 403)
 
     # --- client ---
