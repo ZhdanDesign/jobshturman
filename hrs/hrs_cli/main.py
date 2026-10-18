@@ -8,9 +8,12 @@
   hrs login <key> [--server URL]   enter the access key and download the methodology
   hrs sync                         check the key and download a newer methodology
   hrs license                      key state: tariff, end date, renewal link
-  hrs stage <n>                    procedure of one methodology stage (0–25), never the whole bundle
+  hrs stage <n>                    procedure of one methodology stage (number or id), never the whole bundle
   hrs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
   hrs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
+  hrs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
+  hrs schedule run <task>              run one task now: license, collect, digest, reminders
+  hrs schedule set <task> [--time HH:MM ...] [--on|--off]   when a task runs
 """
 import argparse
 import json
@@ -53,8 +56,8 @@ def main(argv=None) -> int:
     sub.add_parser("sync", help="проверить ключ и скачать новую методику")
     sub.add_parser("license", help="состояние ключа")
     p = sub.add_parser("stage", help="процедура одного этапа методики")
-    p.add_argument("stage_id", type=int)
-    p = sub.add_parser("selftest", help="проверка пакета методики: 26 этапов, выдача, ссылки, водяной знак")
+    p.add_argument("stage_id", help="номер этапа (с 0) или его id")
+    p = sub.add_parser("selftest", help="проверка пакета методики: все этапы манифеста, выдача, ссылки, водяной знак")
     p.add_argument("--library", help="собрать пакет из папки библиотеки вместо скачанного")
     p.add_argument("--include", action="append", default=[], metavar="DEST=SRC",
                    help="добавить файл в собранный пакет, как hrs-keys bundle build --include")
@@ -62,7 +65,43 @@ def main(argv=None) -> int:
     p = sub.add_parser("ui", help="страница анкеты и маршрута в браузере")
     p.add_argument("--view", default="intake", choices=["intake", "progress"])
     p.add_argument("--no-open", action="store_true", help="только напечатать ссылку")
+    p = sub.add_parser("schedule", help="регулярные задачи: сбор, сводка, напоминания, проверка ключа")
+    ssub = p.add_subparsers(dest="schedule_cmd", required=True)
+    p = ssub.add_parser("install", help="поставить задачи в системный планировщик")
+    p.add_argument("--dry-run", action="store_true", help="только показать, что будет сделано")
+    ssub.add_parser("remove", help="убрать задачи из системного планировщика")
+    ssub.add_parser("status", help="расписание, последние запуски, задачи агентов")
+    p = ssub.add_parser("run", help="выполнить задачу сейчас")
+    p.add_argument("task", choices=["license", "collect", "digest", "reminders"])
+    p = ssub.add_parser("set", help="изменить время или выключить задачу")
+    p.add_argument("task", choices=["license", "collect", "digest", "reminders"])
+    p.add_argument("--time", action="append", help="HH:MM, можно несколько")
+    p.add_argument("--on", dest="enabled", action="store_true", default=None)
+    p.add_argument("--off", dest="enabled", action="store_false")
     args = ap.parse_args(argv)
+
+    if args.cmd == "schedule":
+        from hrshturman_core import schedule as core
+
+        from . import schedule
+        try:
+            if args.schedule_cmd == "install":
+                _print(schedule.install(dry_run=args.dry_run))
+            elif args.schedule_cmd == "remove":
+                _print(schedule.remove())
+            elif args.schedule_cmd == "status":
+                _print(schedule.status())
+            elif args.schedule_cmd == "run":
+                _print(schedule.run(args.task))
+            else:
+                s, store = schedule.store_for()
+                core.set_task(store, s.candidate_id, args.task, times=args.time, enabled=args.enabled,
+                              actor="candidate")
+                _print(schedule.status())
+        except DomainError as exc:
+            _print({"error": exc.code, "message": str(exc)})
+            return 1
+        return 0
 
     if args.cmd in ("login", "sync", "license"):
         from . import license
@@ -112,10 +151,11 @@ def main(argv=None) -> int:
         from hrshturman_core.workspace import create_candidate
 
         from . import web
+        from .server import Methodology
         s = paths.settings()
         store = Store(s.db_path).init()
         create_candidate(store, s.candidate_id, s.timezone, actor="installer")
-        url = web.WebUI(store, s.candidate_id).link(args.view)
+        url = web.WebUI(store, s.candidate_id, Methodology(s)).link(args.view)
         print(url, flush=True)
         if not args.no_open:
             web.open_external(url)

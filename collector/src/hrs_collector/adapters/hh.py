@@ -22,6 +22,9 @@ _STATE = re.compile(r'<template[^>]*id="HH-Lux-InitialState"[^>]*>(.*?)</templat
 _PERIODS = {"MONTH": "month", "HOUR": "hour", "DAY": "day", "SHIFT": "shift", "FLY_IN_FLY_OUT": "fifo"}
 
 
+SALARY_PARAMS = ("salary", "only_with_salary")
+
+
 def _search_params(spec: SourceSpec) -> dict:
     text = str(spec.config.get("text") or "").strip()
     if not text:
@@ -30,6 +33,9 @@ def _search_params(spec: SourceSpec) -> dict:
     if spec.config.get("area"):
         params["area"] = spec.config["area"]
     params.update(spec.config.get("params") or {})
+    # Salary is checked after collection: hh would hide every vacancy without a stated salary.
+    for key in SALARY_PARAMS:
+        params.pop(key, None)
     return params
 
 

@@ -12,7 +12,7 @@
   hrs-keys bundle publish <bundle.zip>
   hrs-keys watermark decode <file>           whose key a copied methodology text came from
 
-Settings come from the environment: HRS_KEYS_DATA, HRS_KEYS_SECRET, HRS_KEYS_ADMIN_TOKEN,
+Settings come from the environment: HRS_KEYS_DATA, HRS_KEYS_SECRET, HRS_KEYS_ADMIN_TOKEN, HRS_KEYS_METHODOLOGIST_TOKEN,
 HRS_KEYS_SIGNING_KEY, HRS_KEYS_RENEW_URL, HRS_KEYS_ADMIN_ORIGINS (comma separated, for the admin page).
 """
 import argparse

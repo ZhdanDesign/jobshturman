@@ -97,7 +97,8 @@ def test_browser_and_chat_share_the_answers(home):
     assert intake["pain_ids"] == [2] and intake["custom_pain"] == "нет времени"
     assert from_chat["intake"]["situation"]["target_roles"] == "Коммерческий директор"
     assert done["intake"]["status"] == "confirmed"
-    assert done["progress"][0] == {"stage": 0, "title": "Диагностика", "group": "Подготовка", "status": "done",
+    assert done["progress"][0] == {"stage": 0, "id": "intake-diagnostic", "title": "Диагностика",
+                                   "group": "Подготовка", "status": "done",
                                    "count": None}
     assert len(done["progress"]) == 26
 

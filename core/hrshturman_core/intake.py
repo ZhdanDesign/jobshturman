@@ -262,6 +262,14 @@ def request_help(store, candidate_id, kind, allowed_contact, transfer_scope, act
         return obj
 
 
+def missing_blocks(intake):
+    """Blocks with no answer yet, in asking order. A block counts as answered once any of its questions is."""
+    if intake is None:
+        return list(BLOCKS)
+    missing = [] if intake["skipped"] or intake["pain_ids"] or intake["custom_pain"] else ["pains"]
+    return missing + [b for b, qs in SITUATION_BLOCKS.items() if not any(intake["situation"].get(f) for f, _ in qs)]
+
+
 def get_intake(store, candidate_id):
     """Active intake with the request map, or None before the first draft."""
     with store.read() as tx:

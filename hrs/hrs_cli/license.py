@@ -11,6 +11,7 @@ but never past the key's end date.
 import base64
 import contextlib
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -118,6 +119,18 @@ def save(state: dict) -> None:
     tmp.replace(path)
 
 
+def client_version() -> str:
+    """This hrs's version: the server gives it the newest methodology it can read."""
+    try:
+        return importlib.metadata.version("hrshturman")
+    except importlib.metadata.PackageNotFoundError:
+        return "0"
+
+
+def _headers(token: str | None = None) -> dict:
+    return {"X-Hrs-Version": client_version(), **({"Authorization": f"Bearer {token}"} if token else {})}
+
+
 def _client(server: str, http: httpx.Client | None):
     if http is not None:
         return contextlib.nullcontext(http)
@@ -140,7 +153,8 @@ def _remember_refusal(state: dict, exc: DomainError) -> None:
 
 
 def _activate(state: dict, http) -> dict:
-    resp = http.post("v1/activate", json={"key": state["key"], "install_id": state["install_id"], "client": "hrs"})
+    resp = http.post("v1/activate", json={"key": state["key"], "install_id": state["install_id"], "client": "hrs"},
+                     headers=_headers())
     if resp.status_code != 200:
         exc = _error(resp)
         _remember_refusal(state, exc)
@@ -184,7 +198,7 @@ def refresh(force: bool = False, http: httpx.Client | None = None) -> dict:
     try:
         with _client(state["server"], http) as client:
             token_ok = state.get("token") and parse(state["token_expires_at"]) > now() + timedelta(minutes=5)
-            resp = client.get("v1/status", headers={"Authorization": f"Bearer {state['token']}"}) if token_ok else None
+            resp = client.get("v1/status", headers=_headers(state["token"])) if token_ok else None
             if resp is not None and resp.status_code == 403:
                 _remember_refusal(state, _error(resp))
                 return view()
@@ -210,7 +224,7 @@ def sync(state: dict | None = None, http: httpx.Client | None = None) -> dict:
     with _network(state["server"]), _client(state["server"], http) as client:
         if not state.get("token") or parse(state["token_expires_at"]) <= now() + timedelta(minutes=5):
             _activate(state, client)
-        resp = client.get("v1/bundle/latest", headers={"Authorization": f"Bearer {state['token']}"})
+        resp = client.get("v1/bundle/latest", headers=_headers(state["token"]))
         if resp.status_code != 200:
             exc = _error(resp)
             _remember_refusal(state, exc)
@@ -280,6 +294,8 @@ def view() -> dict:
                       "message": "Ключ давно не проверялся. Подключите интернет и выполните hrs sync."}
     has_bundle = bundle_file().is_file()
     out |= {"days_left": max((expires - now()).days, 0) if expires else None, "methodology": has_bundle}
+    if status.get("hrs_update"):
+        out["hrs_update"] = status["hrs_update"]
     if not has_bundle:
         out["message"] = "Методика не скачана: выполните hrs sync."
     if expires and expires - now() <= WARN_BEFORE:
@@ -290,7 +306,7 @@ def view() -> dict:
 
 class BundleLibrary:
     """The methodology as the MCP server reads it: decrypted in memory, only while the key is valid.
-    Every text it gives out carries the watermark of the key."""
+    Every Markdown text it gives out carries the watermark of the key."""
 
     def _zip(self) -> zipfile.ZipFile:
         refresh()
@@ -313,4 +329,4 @@ class BundleLibrary:
             except KeyError as exc:
                 raise DomainError("not_found", f"В методике нет {name}") from exc
         wm = (self.state.get("status") or {}).get("watermark")
-        return watermark.mark(text, wm) if wm else text
+        return watermark.mark(text, wm) if wm and name.endswith(".md") else text  # data files stay parseable

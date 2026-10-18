@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hrshturman-local"
-version = "0.2.0"
+version = "0.2.1"
 description = "JobShturman local app: MCP server and local UI"
 requires-python = ">=3.12"
 # One mcp version for the whole hrs CLI: 2.x, same as collector/.
-dependencies = ["hrshturman-core", "mcp>=2.3,<3", "python-docx>=1.1", "fpdf2>=2.8", "pypdf>=5"]
+dependencies = ["hrshturman-core>=0.2.1", "mcp>=2.3,<3", "python-docx>=1.1", "fpdf2>=2.8", "pypdf>=5"]
 
 [tool.setuptools]
 packages = ["hrshturman_local"]
 
 [tool.setuptools.package-data]
-hrshturman_local = ["static/*.html", "fonts/*"]
+hrshturman_local = ["static/*.html", "fonts/*", "help.md"]
 
 [tool.uv.sources]
 hrshturman-core = { path = "../core", editable = true }

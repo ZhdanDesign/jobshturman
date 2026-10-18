@@ -157,6 +157,37 @@ form { display: grid; gap: calc(var(--spacing) * 5); }
 .tariff form { margin-top: auto; }
 .upload { margin-bottom: calc(var(--spacing) * 6); }
 table.bundles { min-width: 640px; }
+
+/* Методика: маршрут, файлы, история, редактор */
+#check-panel, #route-panel, .editor-form { margin-bottom: calc(var(--spacing) * 6); }
+.issues { margin: calc(var(--spacing) * 2) 0 0; padding-left: calc(var(--spacing) * 5); display: grid; gap: calc(var(--spacing) * 2); font-size: var(--font-text-xs-size); overflow-wrap: anywhere; }
+details summary { cursor: pointer; }
+.steps { list-style: none; padding: 0; margin: calc(var(--spacing) * 4) 0; display: grid; gap: calc(var(--spacing) * 2); }
+.steps li { display: flex; align-items: center; flex-wrap: wrap; gap: calc(var(--spacing) * 3); }
+.steps input { max-width: 320px; }
+table.route { min-width: 900px; }
+table.route td { vertical-align: middle; }
+table.route td { padding-block: calc(var(--spacing) * 2); }
+table.route td, table.route th { padding-inline: calc(var(--spacing) * 2); }
+table.route .actions { flex-wrap: nowrap; gap: var(--spacing); }
+table.route .button.ghost, .steps .button.ghost { min-height: 32px; width: 32px; padding: var(--spacing); }
+table.route input[data-field="title"] { min-width: 200px; }
+table.route select { width: 150px; }
+table.route tr.off td { color: var(--color-text-secondary); }
+table.route tr.off input[data-field="title"] { text-decoration: line-through; }
+.route-save { margin-top: calc(var(--spacing) * 4); align-items: end; }
+.route-save .dialog-actions { align-items: center; }
+.files { border-top: 1px solid var(--color-border); padding: calc(var(--spacing) * 3) 0; }
+.files ul { list-style: none; margin: calc(var(--spacing) * 2) 0 0; padding: 0; display: grid; gap: var(--spacing); overflow-wrap: anywhere; }
+.revisions li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: calc(var(--spacing) * 2); }
+.revisions li .actions { align-items: center; }
+.revisions time { margin-top: 0; }
+textarea.editor { min-height: 60vh; font-family: var(--font-mono); font-size: var(--font-text-xs-size); line-height: 1.6; tab-size: 2; }
+dialog:has(.diff-list) { width: min(960px, calc(100% - 32px)); }
+.diff-list { display: grid; gap: calc(var(--spacing) * 3); max-height: 60vh; overflow: auto; }
+pre.diff { margin: calc(var(--spacing) * 2) 0 0; padding: calc(var(--spacing) * 3); border-radius: var(--radius-md); background: var(--color-surface-secondary); font-family: var(--font-mono); font-size: var(--font-text-xs-size); white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.diff .add { color: var(--color-text-success-surface); background: var(--color-background-success-surface); }
+pre.diff .del { color: var(--color-text-danger-surface); background: var(--color-background-danger-surface); }
 .no-script { padding: calc(var(--spacing) * 10); }
 @media (max-width: 1180px) {
   .topbar, .page-footer { padding-inline: calc(var(--spacing) * 6); }

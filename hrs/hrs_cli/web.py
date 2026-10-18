@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from hrshturman_core import DomainError, intake, resume
+from hrshturman_core import DomainError, intake, methodology, resume
 from hrshturman_core import applications as apps
 from hrshturman_core.brand import PRODUCT_NAME
 
@@ -26,18 +26,6 @@ from . import paths
 STATIC = Path(__file__).with_name("static")
 MODES = ("chat", "builtin_browser", "external_browser")
 COOKIE = "hrs_session"
-
-# Stage titles as on the landing page; the route groups are the same four.
-GROUPS = [("Подготовка", range(13)), ("Вакансии", range(13, 17)), ("Отклики", range(17, 21)),
-          ("Ответы и встречи", range(21, 26))]
-STAGES = ["Диагностика", "Материалы об опыте", "Желаемые должности и компании", "Сильные стороны",
-          "Сравнение с требованиями", "Навыки", "Пробелы и план", "Основное резюме", "Профили на сайтах",
-          "Основа письма", "Примеры проектов", "Проверенные факты", "Проверка на реальных вакансиях",
-          "Источники вакансий", "Регулярный сбор", "Отбор", "Ваше решение, куда откликаться",
-          "Резюме и письмо под вакансию", "Отправка по вашим правилам", "Анкеты работодателя",
-          "Решение о тестовом задании", "Ответы работодателей", "Статусы откликов", "Когда нужен ваш ответ",
-          "Подготовка к встрече", "Разбор встречи"]
-
 
 def page() -> str:
     """app.html with the design tokens inlined, so one file works as a web page and as an MCP App."""
@@ -71,8 +59,13 @@ def set_mode(mode: str) -> str:
 
 # --- what the page shows ---
 
-def progress(store, cid) -> list[dict]:
-    """Where the candidate is on the route, from the workspace itself: done, active or todo per stage."""
+def route_of(library) -> methodology.Route:
+    """The stages as the methodology on this computer lists them; the format-1 route until it is downloaded."""
+    return methodology.route_or_legacy(library) if library is not None else methodology.legacy_route()
+
+
+def signals(store, cid) -> dict[str, tuple[str, int | None]]:
+    """Progress signals from the workspace itself: signal → (status, count). Stages point at them in the manifest."""
     form = intake.get_intake(store, cid)
     facts = resume.list_facts(store, cid)
     cards = apps.list_applications(store, cid)
@@ -81,49 +74,56 @@ def progress(store, cid) -> list[dict]:
     except DomainError:
         cv = None
     states = [c["state"] for c in cards]
-    status = {}
+    out = {}
     if form:
-        status[0] = "done" if form["status"] == "confirmed" else "active"
+        out["intake"] = ("done" if form["status"] == "confirmed" else "active", None)
     if facts:
-        status[3] = "active"
-        status[11] = "active" if any(f["status"] == "confirmed" for f in facts) else status.get(11)
+        out["facts"] = ("active", len(facts))
+        confirmed = sum(f["status"] == "confirmed" for f in facts)
+        if confirmed:
+            out["facts_confirmed"] = ("active", confirmed)
     if cv:
-        status[7] = "done" if cv.get("status") == "approved" else "active"
+        out["resume"] = ("done" if cv.get("status") == "approved" else "active", None)
     if cards:
-        status[14] = "active"
+        out["vacancies"] = ("active", len(cards))
     if any(s != "found" and s != "needs_full_text" for s in states):
-        status[15] = "active"
+        out["scored"] = ("active", sum(s == "evaluated" for s in states))
     if any(s in ("approved", "deferred", "rejected_policy", "draft_ready", "authorized") for s in states):
-        status[16] = "active"
+        out["decided"] = ("active", None)
     if any(s in ("sent_confirmed", "send_unknown") for s in states):
-        status[18] = "active"
+        out["sent"] = ("active", None)
     if any(c.get("funnel") for c in cards):
-        status[22] = "active"
-    counts = {3: len(facts), 11: sum(f["status"] == "confirmed" for f in facts), 14: len(cards),
-              15: sum(s == "evaluated" for s in states)}
-    out = []
-    for group, numbers in GROUPS:
-        for n in numbers:
-            out.append({"stage": n, "title": STAGES[n], "group": group, "status": status.get(n) or "todo",
-                        "count": counts.get(n)})
+        out["funnel"] = ("active", None)
     return out
 
 
-def state(store, cid) -> dict:
+def progress(store, cid, route: methodology.Route | None = None) -> list[dict]:
+    """Where the candidate is on the route, from the workspace itself: done, active or todo per stage."""
+    route = route or methodology.legacy_route()
+    lit = signals(store, cid)
+    out = []
+    for stage in route.stages:
+        status, count = lit.get(stage.progress, ("todo", None))
+        out.append({"stage": stage.number, "id": stage.id, "title": stage.title,
+                    "group": route.step_title(stage.step), "status": status, "count": count or None})
+    return out
+
+
+def state(store, cid, route: methodology.Route | None = None) -> dict:
     form = intake.get_intake(store, cid)
     return {"intake": form, "request_map": intake.request_map(form) if form else None,
-            "blocks": [intake.questions(b) for b in intake.BLOCKS], "progress": progress(store, cid),
+            "blocks": [intake.questions(b) for b in intake.BLOCKS], "progress": progress(store, cid, route),
             "ui_mode": get_mode()}
 
 
-def answer(store, cid, block, value, actor="candidate"):
+def answer(store, cid, block, value, actor="candidate", route=None):
     intake.answer_block(store, cid, block, value, actor=actor)
-    return state(store, cid)
+    return state(store, cid, route)
 
 
-def confirm(store, cid, expected_version, actor="candidate"):
+def confirm(store, cid, expected_version, actor="candidate", route=None):
     intake.confirm(store, cid, expected_version, actor=actor)
-    return state(store, cid)
+    return state(store, cid, route)
 
 
 # --- the local web server ---
@@ -131,8 +131,8 @@ def confirm(store, cid, expected_version, actor="candidate"):
 class WebUI:
     """Started on first use inside `hrs serve` (a daemon thread) or by `hrs ui`."""
 
-    def __init__(self, store, cid):
-        self.store, self.cid = store, cid
+    def __init__(self, store, cid, library=None):
+        self.store, self.cid, self.library = store, cid, library
         self.tokens: set[str] = set()
         self.sessions: set[str] = set()
         self.server: ThreadingHTTPServer | None = None
@@ -233,7 +233,7 @@ def make_handler(ui: WebUI):
             if url.path == "/app":
                 return self._send(HTTPStatus.OK, page().encode("utf-8"), "text/html; charset=utf-8")
             if url.path == "/api/state":
-                return self._run(lambda: state(ui.store, ui.cid))
+                return self._run(lambda: state(ui.store, ui.cid, route_of(ui.library)))
             self._error(HTTPStatus.NOT_FOUND, "not_found", "Unknown route")
 
         def do_POST(self):
@@ -248,9 +248,9 @@ def make_handler(ui: WebUI):
             def handle():
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if self.path == "/api/answer":
-                    return answer(ui.store, ui.cid, body["block"], body["answer"])
+                    return answer(ui.store, ui.cid, body["block"], body["answer"], route=route_of(ui.library))
                 if self.path == "/api/confirm":
-                    return confirm(ui.store, ui.cid, body["expected_version"])
+                    return confirm(ui.store, ui.cid, body["expected_version"], route=route_of(ui.library))
                 raise KeyError(self.path)
             self._run(handle)
 

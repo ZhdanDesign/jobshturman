@@ -51,7 +51,29 @@ CREATE TABLE IF NOT EXISTS events (
     at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_key ON events(key_id, at);
+-- The methodology draft: every save is a revision, the file tree of a revision is {path: blob sha}.
+CREATE TABLE IF NOT EXISTS revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    by_role TEXT NOT NULL,
+    message TEXT NOT NULL,
+    tree TEXT NOT NULL
+);
+-- Which published version each channel gets: test keys first, then everyone (stable).
+CREATE TABLE IF NOT EXISTS current_bundle (
+    channel TEXT PRIMARY KEY CHECK (channel IN ('stable', 'test')),
+    version TEXT NOT NULL REFERENCES bundles(version)
+);
 """
+
+# Columns added after the first release: (table, column, definition).
+MIGRATIONS = [
+    ("keys", "channel", "TEXT NOT NULL DEFAULT 'stable' CHECK (channel IN ('stable', 'test'))"),
+    ("bundles", "format", "INTEGER NOT NULL DEFAULT 1"),
+    ("bundles", "min_hrs", "TEXT"),
+    ("bundles", "revision", "INTEGER"),
+    ("bundles", "note", "TEXT"),
+]
 
 # Prices are not final (owner decision 2026-10-10); the admin edits them.
 DEFAULT_TARIFFS = [
@@ -69,6 +91,10 @@ class DB:
     def init(self):
         conn = sqlite3.connect(self.path)
         conn.executescript(SCHEMA)
+        for table, column, definition in MIGRATIONS:
+            if column not in [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        conn.commit()
         conn.close()
         with self.tx() as c:
             c.executemany("INSERT OR IGNORE INTO tariffs (id, title, price_rub_from, price_rub_to, months, device_limit)"

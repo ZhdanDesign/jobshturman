@@ -56,7 +56,7 @@ function load({ token = "", routes = {} } = {}) {
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const api = { "/stats": [200, STATS], "/keys": [200, KEYS], "/tariffs": [200, TARIFFS] };
+const api = { "/whoami": [200, { role: "admin" }], "/stats": [200, STATS], "/keys": [200, KEYS], "/tariffs": [200, TARIFFS] };
 
 async function submitDialog(app, id, values, dataset = {}) {
   const submit = { disabled: false };
@@ -82,7 +82,7 @@ test("API ищется относительно /jobshturman/_/admin/ и пол�
   const app = load({ token: "t-123", routes: api });
   assert.equal(app.run('apiUrl("/stats")'), "https://tools.owai.ru/jobshturman/keys/v1/admin/stats");
   await settle();
-  assert.deepEqual(app.calls.map((call) => call.url.split("/admin")[1]).sort(), ["/keys", "/stats", "/tariffs"]);
+  assert.deepEqual(app.calls.map((call) => call.url.split("/admin")[1]).sort(), ["/keys", "/stats", "/tariffs", "/whoami"]);
   assert.ok(app.calls.every((call) => call.headers.Authorization === "Bearer t-123" && call.method === "GET"));
   assert.match(app.element("key-rows").innerHTML, /HRS-QW7K…/);
   assert.match(app.element("key-rows").innerHTML, /Заблокирован/);
@@ -90,7 +90,7 @@ test("API ищется относительно /jobshturman/_/admin/ и пол�
 });
 
 test("без токена — экран входа; вход сохраняет токен, неверный токен не сохраняется", async () => {
-  const app = load({ routes: { ...api, "/stats": (options) => options.headers.Authorization === "Bearer good" ? [200, STATS] : [403, { error: "forbidden", message: "Неверный токен администратора" }] } });
+  const app = load({ routes: { ...api, "/whoami": (options) => options.headers.Authorization === "Bearer good" ? [200, { role: "admin" }] : [403, { error: "forbidden", message: "Неверный токен администратора" }] } });
   const screen = app.element("app").innerHTML;
   assert.match(screen, /id="login-form"/);
   assert.doesNotMatch(screen, /JobShturman|Сервер ключей|data-nav|Ручная выдача|номера заказов/);
@@ -211,4 +211,116 @@ test("журнал переводится на русский, тариф сох
     { price_rub_from: 16000, price_rub_to: 16000 });
   assert.deepEqual(plain(`changedTariffFields(${self}, ${fields({ title: "Самостоятельно", price_rub_from: "15000", price_rub_to: "15000", months: "3", device_limit: "2" })})`), { active: false });
   assert.throws(() => run(`changedTariffFields(${self}, ${fields({ title: "A", price_rub_from: "9", price_rub_to: "1", months: "3", device_limit: "2" })})`), /Цена «от»/);
+});
+
+// --- методика ---
+
+const DRAFT = {
+  head: { id: 3, at: "2026-10-18T10:00:00Z", by: "methodologist", message: "Маршрут: этапы и шаги", files: 5 },
+  files: [
+    { path: "agent/genesis.md", sha: "g1", size: 900 }, { path: "library_manifest.json", sha: "m1", size: 400 },
+    { path: "skills/intake/SKILL.md", sha: "s1", size: 300 }, { path: "skills/resume/SKILL.md", sha: "s2", size: 300 },
+    { path: "README.md", sha: "r1", size: 10 },
+  ],
+  route: null, manifest_version: "0.4.0", current: { stable: "0.4.0.r2", test: "0.4.0.r2" }, genesis: "agent/genesis.md",
+  steps: [{ id: "about", title: "О вас" }, { id: "apply", title: "Отклики" }],
+  stages: [
+    { id: "intake", title: "Анкета", step: "about", dir: "skills/intake", progress: "intake", tools: ["intake_form"], files: ["skills/intake/SKILL.md"], position: 0 },
+    { id: "resume", title: "Резюме", step: "about", dir: "skills/resume", tools: [], files: ["skills/resume/SKILL.md"], position: 1 },
+  ],
+  check: { ok: true, errors: [], findings: [{ code: "unknown_tool", detail: "инструмент «x»", stage: "resume" }] },
+};
+const REVISIONS = [{ id: 3, at: "2026-10-18T10:00:00Z", by: "methodologist", message: "Маршрут", files: 5 }, { id: 2, at: "2026-10-17T10:00:00Z", by: "admin", message: "Загружен library.zip", files: 5 }];
+const methodologyApi = { ...api, "/whoami": [200, { role: "methodologist" }], "/methodology": [200, DRAFT], "/methodology/revisions?limit=50": [200, REVISIONS] };
+const writes = (app) => app.calls.filter((call) => call.method !== "GET").map((call) => [call.method, call.url.split("/admin")[1], call.body]);
+
+test("автор методики видит только методику, главный промпт и версии; ключи ему не открываются", async () => {
+  const app = load({ token: "author", routes: methodologyApi });
+  app.context.window.location.hash = "#keys";
+  await app.run("render()");
+  const page = app.element("app").innerHTML;
+  assert.match(page, /data-nav="methodology"[\s\S]*data-nav="genesis"[\s\S]*data-nav="bundles"/);
+  assert.doesNotMatch(page, /data-nav="keys"|data-nav="tariffs"/);
+  assert.ok(!app.calls.some((call) => /^\/(keys|stats|tariffs)/.test(call.url.split("/admin")[1])));
+  const main = app.element("main").innerHTML;
+  assert.match(main, /Черновик: версия 3/);
+  assert.match(main, /Анкета[\s\S]*Резюме/);
+  assert.match(main, /href="#edit\/agent%2Fgenesis\.md"/);
+  assert.match(main, /Замечания: 1/);
+});
+
+test("маршрут: перенос, новый этап и шаг, выключение; сохраняется одним запросом в нужном порядке", async () => {
+  const app = load({ token: "author", routes: { ...methodologyApi, "PUT /methodology/route": [200, { id: 4 }] } });
+  app.context.window.location.hash = "#methodology";
+  await app.run("render()");
+  app.run("moveStage(1, -1)");
+  await submitDialog(app, "step-form", { code: "money", title: "Деньги" });
+  await submitDialog(app, "stage-form", { code: "salary-talk", title: "Разговор о деньгах", step: "money" });
+  await submitDialog(app, "stage-form", { code: "Bad Id", title: "x", step: "money" });
+  assert.match(app.element("form-error").textContent, /латинские строчные/);
+  app.run('editRoute({ dataset: { field: "on" }, checked: false, closest: () => ({ dataset: { stage: "1" } }) })');
+  app.run('editRoute({ dataset: { field: "version" }, value: "0.5.0" })');
+  assert.match(app.element("route-panel").innerHTML, /Разговор о деньгах[\s\S]*Есть несохранённые изменения/);
+  assert.deepEqual([0, 1, 2].map((i) => app.run(`stageNumber(data.route.stages, ${i})`)), [0, null, 1]);
+  await app.element("app").listeners.click({ target: { closest: () => ({ dataset: { action: "route-save" }, disabled: false }) } });
+  await settle();
+  const [[method, path, body]] = writes(app);
+  assert.deepEqual([method, path], ["PUT", "/methodology/route"]);
+  assert.equal(body.version, "0.5.0");
+  assert.deepEqual(body.steps.map((step) => step.id), ["about", "apply", "money"]);
+  assert.deepEqual(body.stages.map((stage) => [stage.id, stage.step, stage.status]), [["resume", "about", undefined], ["intake", "about", "off"], ["salary-talk", "money", undefined]]);
+  assert.ok(body.stages.every((stage) => !("files" in stage) && !("position" in stage)));
+});
+
+test("файл сохраняется с версией, которую открыли; чужая правка не перезаписывается", async () => {
+  let conflict = false;
+  const app = load({ token: "author", routes: { ...methodologyApi,
+    "/methodology/file?path=agent%2Fgenesis.md": [200, { path: "agent/genesis.md", sha: "g1", text: "# Правила\n", size: 10 }],
+    "PUT /methodology/file": () => conflict ? [409, { error: "conflict", message: "agent/genesis.md изменили, пока он был открыт: обновите страницу" }] : [200, { id: 4 }],
+  } });
+  app.context.window.location.hash = "#genesis";
+  await app.run("render()");
+  assert.match(app.element("main").innerHTML, /Главный промпт[\s\S]*Опубликовать тестовым/);
+  assert.equal(app.element("file-text").value, "# Правила\n");
+  const error = { hidden: true, textContent: "" };
+  const form = { id: "file-form", values: { text: "# Правила v2\n", message: "без пауз" }, classList: { contains: () => false }, querySelector: (s) => s === ".form-error" ? error : { disabled: false } };
+  await app.run("submitMainForm")(form);
+  conflict = true;
+  await app.run("render()");
+  await app.run("submitMainForm")(form);
+  assert.deepEqual(writes(app).map(([, , body]) => body), [
+    { path: "agent/genesis.md", text: "# Правила v2\n", base_sha: "g1", message: "без пауз" },
+    { path: "agent/genesis.md", text: "# Правила v2\n", base_sha: "g1", message: "без пауз" },
+  ]);
+  assert.match(error.textContent, /изменили, пока он был открыт/);
+  assert.equal(error.hidden, false);
+});
+
+test("публикация тестовым и откат версии для всех", async () => {
+  const BUNDLES = [{ version: "0.5.0.r4", published_at: "2026-10-18T11:00:00Z", size: 2048, sha256: "a".repeat(64), channels: ["test"], min_hrs: "0.3.0", revision: 4, note: "новый этап" },
+    { version: "0.4.0.r2", published_at: "2026-10-17T11:00:00Z", size: 2048, sha256: "b".repeat(64), channels: ["stable"], min_hrs: null, revision: 2, note: null }];
+  const app = load({ token: "author", routes: { ...methodologyApi, "/bundles": [200, BUNDLES],
+    "POST /methodology/publish": [201, { version: "0.5.0.r4", channels: ["test"] }], "POST /bundles/0.4.0.r2/current": [200, {}] } });
+  app.context.window.location.hash = "#methodology";
+  await app.run("render()");
+  await submitDialog(app, "publish-form", { note: "новый этап" }, { channel: "test" });
+  app.context.window.location.hash = "#bundles";
+  await app.run("render()");
+  const table = app.element("main").innerHTML;
+  assert.match(table, /v0\.5\.0\.r4[\s\S]*Тестовые ключи[\s\S]*Нужен hrs 0\.3\.0/);
+  assert.doesNotMatch(table, /id="bundle-form"/);
+  await app.element("app").listeners.click({ target: { closest: () => ({ dataset: { action: "set-current", version: "0.4.0.r2", channel: "stable" }, disabled: false }) } });
+  await settle();
+  assert.deepEqual(writes(app), [
+    ["POST", "/methodology/publish", { channel: "test", note: "новый этап" }],
+    ["POST", "/bundles/0.4.0.r2/current", { channel: "stable" }],
+  ]);
+});
+
+test("сравнение версий показывает строки с правками и сворачивает остальное", () => {
+  const app = load();
+  const before = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].join("\n");
+  const after = ["a", "b", "c", "d", "e", "f", "g", "H", "i", "j", "k"].join("\n");
+  const lines = JSON.parse(app.run(`JSON.stringify(lineDiff(${JSON.stringify(before)}, ${JSON.stringify(after)}).map(([mark, line]) => mark + line))`));
+  assert.deepEqual(lines, [" …", " e", " f", " g", "-h", "+H", " i", " j", "+k"]);
 });

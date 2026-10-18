@@ -24,6 +24,7 @@ ADMIN = {"Authorization": "Bearer admin"}
 STAGE_00 = ("---\nname: stage-00\ndescription: этап 0\n---\n# Диагностика\n\nСначала выясни, что болит у кандидата сейчас.\n\n"
             "Потом сверь желаемую роль с опытом и рынком.\n\n- Пункт со списком трудностей\n\n"
             "```\nhrs paths\n```\n")
+RULES = "# Главные правила\n\nВеди человека без пауз: после ответа сразу следующий шаг.\n"
 ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\u2062\ufeff]")
 
 
@@ -48,6 +49,8 @@ def keys(tmp_path, monkeypatch):
     (lib / "skills" / "stage-00-diagnostic" / "references" / "procedure.md").write_text(STAGE_00, encoding="utf-8")
     monkeypatch.setenv("HRS_KEYS_DATA", str(settings.data))
     monkeypatch.setenv("HRS_KEYS_SECRET", settings.secret.decode())
+    (lib / "agent").mkdir()
+    (lib / "agent" / "genesis.md").write_text(RULES, encoding="utf-8")
     (lib / "library_manifest.json").write_text(json.dumps({"version": "0.4.0"}), encoding="utf-8")
     _, data = bundle.build(lib, version="0.4.0.t1")
     client.post("/v1/admin/bundles", files={"file": ("b.zip", data)}, headers=ADMIN).raise_for_status()
@@ -154,6 +157,22 @@ def test_the_agent_gets_one_stage_at_a_time(keys, capsys):
     assert main.main(["stage", "0"]) == 0
     out = capsys.readouterr().out
     assert "Сначала выясни" in plain(out) and "Мастер-резюме" not in plain(out) and plain(out) != out
+
+
+def test_the_agent_reads_the_main_prompt_and_the_route(keys):
+    license.login(issue(keys)["key"], http=keys)
+
+    async def go():
+        async with Client(build()) as c:
+            rules = (await c.call_tool("agent_rules", {})).content[0].text
+            route = json.loads((await c.call_tool("methodology_route", {})).content[0].text)
+            by_id = (await c.call_tool("stage_procedure", {"stage_id": "master-cv"})).content[0].text
+            return rules, route, by_id
+    rules, route, by_id = asyncio.run(go())
+    assert plain(rules) == RULES and rules != RULES  # watermarked like the stages
+    assert [(s["number"], s["id"]) for s in route["stages"]] == [(0, "diagnostic"), (7, "master-cv")]
+    assert plain(by_id) == "Мастер-резюме"
+    assert license.view().get("hrs_update") is None
 
 
 def test_expired_key_switches_the_methodology_off_and_renewal_brings_it_back(keys):

@@ -214,3 +214,13 @@ def test_linkedin_end_of_results_is_not_changed_page(monkeypatch):
         LinkedInGuestAdapter(mock_http({"www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search":
                                         httpx.Response(200, text="<div class='other-layout'>x</div>")})()).read_page(LI, None)
     assert exc.value.code == "changed_page"
+
+
+def test_hh_search_never_filters_by_salary():
+    """Salary is checked after collection (vacancy_constraints): hh hides vacancies without a stated salary."""
+    from hrs_collector.adapters.hh import _search_params
+    spec = HH.model_copy(update={"config": HH.config | {"params": {"salary": 1200000, "only_with_salary": True,
+                                                                  "experience": "moreThan6"}}})
+    params = _search_params(spec)
+    assert "salary" not in params and "only_with_salary" not in params
+    assert params["experience"] == "moreThan6"

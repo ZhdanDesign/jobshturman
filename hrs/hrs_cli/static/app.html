@@ -237,7 +237,7 @@ function progressView() {
     groups[groups.length - 1].items.push(s);
   }
   const label = {done: "готово", active: "в работе", todo: "впереди"};
-  return `<h1>Маршрут</h1><p class="lead">26 этапов в четырёх группах. Агент идёт по ним по порядку.</p>` +
+  return `<h1>Маршрут</h1><p class="lead">Этапы методики по шагам. Агент идёт по ним по порядку.</p>` +
     groups.map((g) => `<section class="group"><h2>${esc(g.name)}</h2><ol class="route">${g.items.map((s) =>
       `<li class="${s.status}"><span class="n">${String(s.stage).padStart(2, "0")}</span><span class="t">${esc(s.title)}${
         s.count ? ` <span class="note">· ${s.count}</span>` : ""}</span><span class="badge ${s.status}">${label[s.status]}</span></li>`).join("")}</ol></section>`).join("");

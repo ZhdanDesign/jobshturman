@@ -26,9 +26,24 @@ class VacancyConstraintsTests(unittest.TestCase):
             self.assertIn("salary", out["unknown"])
 
     def test_below_minimum_and_wrong_format_are_hard_conflicts(self):
-        out = checks.vacancy_constraints(vacancy(salary={"max": 300000, "currency": "RUB"}, work_format=["ON_SITE"]),
+        out = checks.vacancy_constraints(vacancy(salary={"max": 250000, "currency": "RUB"}, work_format=["ON_SITE"]),
                                          POLICY)
         self.assertEqual(out["hard_conflicts"], ["salary", "format"])
+
+    def test_salary_only_clearly_below_is_a_conflict(self):
+        asked = POLICY | {"salary_min": 1200000}
+        cases = [({"min": 100000, "max": 100000, "currency": "RUB"}, "below"),   # явно ниже
+                 ({"min": 700000, "max": 1000000, "currency": "RUB"}, "near"),  # вилка близко к запросу
+                 ({"min": 800000, "currency": "RUB"}, "near"),                  # «от 800 000», верх открыт
+                 ({"min": 1300000, "currency": "RUB"}, "ok"),
+                 (None, "unknown")]                                              # «по итогам собеседования»
+        for salary, expected in cases:
+            out = checks.vacancy_constraints(vacancy(salary=salary), asked)
+            self.assertEqual(out["salary"], expected, salary)
+            self.assertEqual("salary" in out["hard_conflicts"], expected == "below", salary)
+        strict = checks.vacancy_constraints(vacancy(salary={"max": 1000000, "currency": "RUB"}),
+                                            asked | {"salary_tolerance": 0.1})
+        self.assertEqual(strict["salary"], "below")
 
     def test_other_currency_or_period_is_not_converted(self):
         out = checks.vacancy_constraints(vacancy(salary={"max": 9000, "currency": "USD"}), POLICY)
@@ -50,6 +65,29 @@ class VacancyConstraintsTests(unittest.TestCase):
             checks.vacancy_constraints(vacancy(), {"salary": 1})
         with self.assertRaises(DomainError):
             checks.vacancy_constraints(vacancy(), {"formats": ["office"]})
+
+
+class ScreenTests(unittest.TestCase):
+    VACANCIES = [
+        {"id": "a", "vacancy": vacancy(salary={"min": 100000, "max": 150000, "currency": "RUB"})},  # явно ниже
+        {"id": "b", "vacancy": vacancy(salary=None)},                                               # зарплаты нет
+        {"id": "c", "vacancy": vacancy(salary={"max": 330000, "currency": "RUB"})},                 # на 17% ниже
+        {"id": "d", "vacancy": vacancy(work_format=["ON_SITE"], salary=None)},                     # не тот формат
+    ]
+
+    def ids(self, level):
+        out = checks.screen(self.VACANCIES, POLICY, level)
+        return out["keep"], {d["id"] for d in out["dropped"]}
+
+    def test_levels(self):
+        self.assertEqual(self.ids("aggressive"), (["a", "b", "c", "d"], set()))
+        self.assertEqual(self.ids("moderate"), (["b", "c"], {"a", "d"}))
+        self.assertEqual(self.ids("specialized"), (["b"], {"a", "c", "d"}))
+
+    def test_default_is_moderate_and_unknown_level_fails(self):
+        self.assertEqual(checks.screen(self.VACANCIES, POLICY)["level"], "moderate")
+        with self.assertRaises(DomainError):
+            checks.screen(self.VACANCIES, POLICY, "light")
 
 
 class TextCheckTests(Base):

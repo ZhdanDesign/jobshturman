@@ -22,13 +22,22 @@ def _currency(code):
     return "RUB" if code == "RUR" else code  # hh.ru still says RUR
 
 
+SALARY_TOLERANCE = 0.3
+
+
 def vacancy_constraints(vacancy: dict, policy: dict) -> dict:
     """Stage 15, step 4. policy: salary_min, currency (default RUB), gross (true/false/null),
-    formats (REMOTE/HYBRID/ON_SITE), locations (cities or countries), relocation (bool).
-    Unknown stays unknown: a missing salary is never read as zero and never as a match."""
-    allowed = {"salary_min", "currency", "gross", "formats", "locations", "relocation"}
+    formats (REMOTE/HYBRID/ON_SITE), locations (cities or countries), relocation (bool),
+    salary_tolerance (share below salary_min that is still worth a look, default 0.3).
+    Unknown stays unknown: a missing salary is never read as zero and never as a match.
+    Salary is below only when the vacancy's top is stated and clearly under the ask; an open
+    range («от 800 000») or a top within the tolerance is near: offered, not filtered out."""
+    allowed = {"salary_min", "currency", "gross", "formats", "locations", "relocation", "salary_tolerance"}
     if not isinstance(policy, dict) or set(policy) - allowed:
         raise DomainError("invalid_schema", f"policy fields: {sorted(allowed)}")
+    tolerance = policy.get("salary_tolerance", SALARY_TOLERANCE)
+    if not isinstance(tolerance, (int, float)) or not 0 <= tolerance < 1:
+        raise DomainError("invalid_schema", "salary_tolerance: a share from 0 to 1")
     formats = {f.upper() for f in policy.get("formats") or []}
     if formats - FORMATS:
         raise DomainError("invalid_schema", f"formats: {sorted(FORMATS)}")
@@ -47,6 +56,9 @@ def vacancy_constraints(vacancy: dict, policy: dict) -> dict:
         notes.append(f"зарплата указана за {salary['period']}, не за месяц")
     else:
         salary_ok = top >= policy["salary_min"]
+        if not salary_ok and (salary.get("max") is None or top >= policy["salary_min"] * (1 - tolerance)):
+            salary_ok = "near"
+            notes.append("верх вилки не указан" if salary.get("max") is None else "зарплата немного ниже запроса")
         if policy.get("gross") is not None and salary.get("gross") is not None and salary["gross"] != policy["gross"]:
             notes.append("в вакансии и в политике разные gross/net: сравнение приблизительное")
 
@@ -67,10 +79,37 @@ def vacancy_constraints(vacancy: dict, policy: dict) -> dict:
         if location_ok and not any(p in where for p in places):
             notes.append("нужен переезд")
 
-    result = {"salary": "below" if salary_ok is False else _status(salary_ok),
+    result = {"salary": "below" if salary_ok is False else "near" if salary_ok == "near" else _status(salary_ok),
               "format": _status(format_ok), "location": _status(location_ok)}
     return {**result, "hard_conflicts": [k for k, v in result.items() if v in ("below", "conflict")],
             "unknown": [k for k, v in result.items() if v == "unknown"], "notes": notes}
+
+
+# How much of the collected market is kept before scoring. Salary unknown is kept on every level.
+SEARCH_LEVELS = {
+    "aggressive": {"drop": False, "salary_tolerance": None},  # все каналы и широкие запросы, без отсева
+    "moderate": {"drop": True, "salary_tolerance": SALARY_TOLERANCE},  # по профилю, отсев явных конфликтов
+    "specialized": {"drop": True, "salary_tolerance": 0.15},  # больше точных запросов, строже к зарплате
+}
+
+
+def screen(items: list[dict], policy: dict, level: str = "moderate") -> dict:
+    """Stage 15 before scoring: which collected vacancies go on to the 1-5 score at this search level.
+    items: [{id, vacancy}]. Only hard conflicts are dropped, each with its reasons; order is kept."""
+    if level not in SEARCH_LEVELS:
+        raise DomainError("invalid_schema", f"level must be one of {list(SEARCH_LEVELS)}")
+    rules = SEARCH_LEVELS[level]
+    if rules["salary_tolerance"] is not None and "salary_tolerance" not in policy:
+        policy = policy | {"salary_tolerance": rules["salary_tolerance"]}
+    keep, dropped = [], []
+    for item in items:
+        verdict = vacancy_constraints(item["vacancy"], policy)
+        if rules["drop"] and verdict["hard_conflicts"]:
+            dropped.append({"id": item["id"], "reasons": verdict["hard_conflicts"], "notes": verdict["notes"]})
+        else:
+            keep.append(item["id"])
+    return {"level": level, "keep": keep, "dropped": dropped,
+            "counts": {"total": len(items), "keep": len(keep), "dropped": len(dropped)}}
 
 
 def check_text(text: str, fact_ids: list[str], facts_by_id: dict) -> dict:

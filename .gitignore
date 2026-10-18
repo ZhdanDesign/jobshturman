@@ -43,3 +43,7 @@ var/
 
 # Письма с ключами доступа: только на этом компьютере
 docs/letters/*.with-key.md
+
+# Голосовые заметки и их расшифровки владельца: только локально
+MetaProject_Job_Search_—_Specifications_and_Library/audio/
+MetaProject_Job_Search_—_Specifications_and_Library/transcripts/

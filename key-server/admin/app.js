@@ -6,45 +6,60 @@ const TOKEN_KEY = "hrs-keys-admin-token";
 const root = document.getElementById("app");
 const dialog = document.getElementById("dialog");
 const filters = { query: "", status: "all", tariff: "all" };
-const data = { keys: [], tariffs: [], stats: null, current: null };
+const data = { keys: [], tariffs: [], stats: null, current: null, role: null, draft: null, route: null, file: null };
 const statusNames = { active: "Активен", expiring: "Истекает", expired: "Истёк", revoked: "Заблокирован" };
 const reasonNames = { refund: "Возврат оплаты", violation: "Нарушение условий", reissue: "Перевыпуск ключа", other: "Другое" };
 const deniedNames = { revoked: "ключ заблокирован", expired: "срок истёк", device_limit: "превышен лимит устройств" };
+// Методика: главный промпт — файл внутри пакета, агент читает его первым (key-server/API.md, «Редактор методики»).
+const GENESIS = "agent/genesis.md";
+const MANIFEST = "library_manifest.json";
+const roleNames = { admin: "Администратор", methodologist: "Автор методики" };
+const channelNames = { test: "Тестовые ключи", stable: "Все пользователи" };
+const changeNames = { added: "Добавлен", removed: "Удалён", changed: "Изменён" };
+const progressNames = {
+  intake: "Анкета заполнена", facts: "Собраны факты", facts_confirmed: "Факты подтверждены", resume: "Есть резюме",
+  vacancies: "Найдены вакансии", scored: "Вакансии оценены", decided: "Решения по вакансиям", sent: "Отклики отправлены", funnel: "Есть ответы работодателей",
+};
 let fullKey = null;
 let noticeTimer;
 let renderSeq = 0;
 let shellShown = false;
 
 // Оболочка админки появляется в DOM только после входа; до входа на странице одна карточка.
-const SHELL = `
+// Автор методики видит только методику, главный промпт и версии; администратор — всё.
+const NAV = {
+  keys: ['<circle cx="8" cy="15" r="5"/><path d="m11.5 11.5 8-8L22 6l-2 2-2-2-2 2 2 2-3 3"/>', 'Ключи <span class="nav-count" id="nav-count"></span>'],
+  tariffs: ['<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7 15h4"/>', "Тарифы"],
+  methodology: ['<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z"/><path d="M19 19v2H6M8 7h7M8 11h5"/>', "Методика"],
+  genesis: ['<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>', "Главный промпт"],
+  bundles: ['<path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/>', "Версии"],
+};
+
+function shell(role) {
+  const pages = role === "admin" ? ["keys", "tariffs", "methodology", "genesis", "bundles"] : ["methodology", "genesis", "bundles"];
+  const home = role === "admin" ? "keys" : "methodology";
+  return `
   <a class="skip-link" href="#main">Перейти к содержимому</a>
   <aside class="sidebar">
-    <a class="brand" href="#keys" aria-label="JobShturman — список ключей">
+    <a class="brand" href="#${home}" aria-label="JobShturman — ${role === "admin" ? "список ключей" : "методика"}">
       <span class="brand-mark" aria-hidden="true">H</span>
-      <span><strong>JobShturman</strong><small>Сервер ключей</small></span>
+      <span><strong>JobShturman</strong><small>${role === "admin" ? "Сервер ключей" : "Редактор методики"}</small></span>
     </a>
-    <div class="nav-label">Управление</div>
+    <div class="nav-label">${roleNames[role] || "Управление"}</div>
     <nav aria-label="Главная навигация">
-      <a href="#keys" data-nav="keys">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="5"/><path d="m11.5 11.5 8-8L22 6l-2 2-2-2-2 2 2 2-3 3"/></svg>
-        Ключи <span class="nav-count" id="nav-count"></span>
-      </a>
-      <a href="#tariffs" data-nav="tariffs">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7 15h4"/></svg>
-        Тарифы
-      </a>
-      <a href="#bundles" data-nav="bundles">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>
-        Методика
-      </a>
+      ${pages.map((page) => `<a href="#${page}" data-nav="${page}">
+        <svg viewBox="0 0 24 24" aria-hidden="true">${NAV[page][0]}</svg>
+        ${NAV[page][1]}
+      </a>`).join("")}
     </nav>
     <div class="sidebar-foot"><button class="button" data-action="logout" type="button">Выйти</button><p>Токен хранится только в этой вкладке.</p></div>
   </aside>
   <div class="workspace">
-    <header class="topbar"><span>Администрирование <span class="divider">/</span> <strong id="breadcrumb">Ключи</strong></span><span class="topbar-note">Ручная выдача после оплаты</span></header>
+    <header class="topbar"><span>${role === "admin" ? "Администрирование" : "Редактор"} <span class="divider">/</span> <strong id="breadcrumb">Ключи</strong></span><span class="topbar-note">${role === "admin" ? "Ручная выдача после оплаты" : "Каждое сохранение — новая версия черновика"}</span></header>
     <main id="main" tabindex="-1"></main>
-    <footer class="page-footer">JobShturman <span>Только ключи, устройства и номера заказов</span></footer>
+    <footer class="page-footer">JobShturman <span>${role === "admin" ? "Только ключи, устройства и номера заказов" : "Пользователи получают методику только после публикации"}</span></footer>
   </div>`;
+}
 
 class AuthError extends Error {}
 
@@ -96,14 +111,14 @@ async function api(path, { method = "GET", json, form } = {}) {
   }
   const result = await response.json().catch(() => null);
   if (response.status === 401 || response.status === 403) throw new AuthError(`${errorText(result, response.status).replace(/\.$/, "")}. Войдите заново.`);
-  if (!response.ok) throw new Error(errorText(result, response.status));
+  if (!response.ok) throw Object.assign(new Error(errorText(result, response.status)), { status: response.status, code: result?.error });
   return result;
 }
 
 function logout(message = "", isError = true) {
   writeToken("");
   if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
-  Object.assign(data, { keys: [], stats: null, current: null });
+  Object.assign(data, { keys: [], stats: null, current: null, role: null, draft: null, route: null, file: null });
   if (dialog.open) dialog.close();
   renderLogin(message, isError);
 }
@@ -197,13 +212,14 @@ const mainEl = () => document.getElementById("main");
 
 function setNav(page) {
   if (!shellShown) {
-    root.innerHTML = SHELL;
+    root.innerHTML = shell(data.role);
     shellShown = true;
-    document.title = "Сервер ключей · JobShturman";
+    document.title = data.role === "admin" ? "Сервер ключей · JobShturman" : "Методика · JobShturman";
   }
-  document.getElementById("breadcrumb").textContent = { tariffs: "Тарифы", bundles: "Методика", key: "Карточка ключа", keys: "Ключи" }[page];
+  document.getElementById("breadcrumb").textContent = { tariffs: "Тарифы", bundles: "Версии", key: "Карточка ключа", keys: "Ключи", methodology: "Методика", genesis: "Главный промпт", edit: "Файл методики" }[page];
+  const current = { key: "keys", edit: "methodology" }[page] || page;
   document.querySelectorAll("[data-nav]").forEach((link) => {
-    if (link.dataset.nav === (page === "key" ? "keys" : page)) link.setAttribute("aria-current", "page");
+    if (link.dataset.nav === current) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
 }
@@ -270,13 +286,14 @@ function renderDetail(key, events) {
     ["Лимит устройств", `${key.devices.length} из ${key.device_limit}`], ["Последний вход", dateTime(key.last_seen)],
     ["Скачиваний пакета", key.downloads], ["Отказов в доступе", key.denied],
     ["Номер заказа", key.order_ref ? `<code>${escapeHTML(key.order_ref)}</code>` : "—"],
+    ["Версии методики", key.channel === "test" ? "Тестовые: получает новую версию первым" : "Обычные"],
   ];
   if (key.revoked_at) facts.push(["Заблокирован", `${dateTime(key.revoked_at)} · ${reason}`]);
   const revoked = key.state === "revoked";
   mainEl().innerHTML = `
     <a class="back-link" href="#keys">${icon("back")}Все ключи</a>
     <div class="page-heading detail-heading"><div><h1 class="mono">${escapeHTML(keyLabel(key))}</h1>${badge(key)}</div>
-      <div class="actions"><button class="button" data-action="extend">Продлить</button><button class="button ${revoked ? "" : "danger"}" data-action="${revoked ? "restore" : "revoke"}">${revoked ? "Разблокировать" : "Заблокировать"}</button></div></div>
+      <div class="actions"><button class="button" data-action="toggle-channel">${key.channel === "test" ? "Вернуть в обычные" : "Сделать тестовым"}</button><button class="button" data-action="extend">Продлить</button><button class="button ${revoked ? "" : "danger"}" data-action="${revoked ? "restore" : "revoke"}">${revoked ? "Разблокировать" : "Заблокировать"}</button></div></div>
     ${revoked ? `<p class="warning-note blocked-note"><strong>Доступ заблокирован.</strong> Причина: ${reason}</p>` : key.state === "expired" ? '<p class="warning-note">Срок ключа истёк. Доступ к методике отключён; наработки пользователя остаются в его локальном хранилище.</p>' : key.state === "expiring" ? '<p class="warning-note">До окончания меньше суток. Агент предупреждает пользователя и даёт ссылку на продление.</p>' : ""}
     <div class="detail-grid"><div class="stack">
       <section class="panel"><h2>Детали ключа</h2><dl class="facts">${facts.map(([title, value]) => `<dt>${title}</dt><dd>${value}</dd>`).join("")}</dl></section>
@@ -305,24 +322,282 @@ function renderTariffs() {
 }
 
 function renderBundles(bundles) {
-  mainEl().innerHTML = `<div class="page-heading"><div><h1>Методика</h1><p>Опубликованные версии пакета. Пользователи получают последнюю.</p></div></div>
-    <section class="panel upload"><h2>Новая версия</h2>
-      <form id="bundle-form"><div class="field"><label for="bundle-file">Пакет zip</label><input id="bundle-file" name="file" type="file" accept=".zip,application/zip" required><small>Собирается командой <code>hrs-keys bundle build</code>; версия берётся из bundle.json внутри. Сервер подписывает пакет сам.</small></div>
+  const upload = data.role === "admin" ? `<section class="panel upload"><h2>Загрузить готовый пакет</h2>
+      <form id="bundle-form"><div class="field"><label for="bundle-file">Пакет zip</label><input id="bundle-file" name="file" type="file" accept=".zip,application/zip" required><small>Собирается командой <code>hrs-keys bundle build</code>; версия берётся из bundle.json внутри. Пакет сразу становится текущим для всех. Обычный путь — публикация из раздела «Методика».</small></div>
         <p class="form-error" role="alert" hidden></p>
-        <div class="dialog-actions"><button type="submit" class="button primary">${icon("upload")}Опубликовать</button></div></form></section>
+        <div class="dialog-actions"><button type="submit" class="button primary">${icon("upload")}Опубликовать</button></div></form></section>` : "";
+  const target = (bundle, channel) => bundle.channels.includes(channel) ? "" : `<button class="button" data-action="set-current" data-version="${escapeHTML(bundle.version)}" data-channel="${channel}">${channel === "test" ? "Тестовым" : "Всем"}</button>`;
+  mainEl().innerHTML = `<div class="page-heading"><div><h1>Версии методики</h1><p>Тестовые ключи получают версию с меткой «Тестовые ключи», остальные — с меткой «Все пользователи». Откат — сделать текущей прежнюю версию.</p></div></div>
+    ${upload}
     <div class="table-wrap" role="region" aria-label="Версии методики, прокручивается по горизонтали" tabindex="0">
-      <table class="bundles"><thead><tr><th scope="col">Версия</th><th scope="col">Опубликована</th><th scope="col">Размер</th><th scope="col">SHA-256</th></tr></thead><tbody>${bundles.map((bundle, i) => `<tr>
-        <td><span class="mono">v${escapeHTML(bundle.version)}</span>${i === 0 ? ' <span class="badge active">Текущая</span>' : ""}</td><td>${dateTime(bundle.published_at)}</td>
-        <td>${(bundle.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</td><td class="mono muted">${escapeHTML(bundle.sha256.slice(0, 16))}…</td></tr>`).join("")}</tbody></table>
-      ${bundles.length ? "" : '<div class="empty"><h3>Версий пока нет</h3><p class="muted">Опубликуйте первый пакет методики.</p></div>'}
-    </div>`;
+      <table class="bundles"><thead><tr><th scope="col">Версия</th><th scope="col">Опубликована</th><th scope="col">Комментарий</th><th scope="col">Размер</th><th scope="col">Сделать текущей</th></tr></thead><tbody>${bundles.map((bundle) => `<tr>
+        <td><span class="mono">v${escapeHTML(bundle.version)}</span>${bundle.channels.map((channel) => ` <span class="badge ${channel === "stable" ? "active" : "expiring"}">${channelNames[channel]}</span>`).join("")}${bundle.min_hrs ? `<br><small class="muted">Нужен hrs ${escapeHTML(bundle.min_hrs)} или новее</small>` : ""}</td>
+        <td>${dateTime(bundle.published_at)}</td><td class="small">${escapeHTML(bundle.note || (bundle.revision ? `Черновик, версия ${bundle.revision}` : "—"))}</td>
+        <td>${(bundle.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</td><td><div class="actions">${target(bundle, "test")}${target(bundle, "stable")}</div></td></tr>`).join("")}</tbody></table>
+      ${bundles.length ? "" : '<div class="empty"><h3>Версий пока нет</h3><p class="muted">Опубликуйте методику из раздела «Методика».</p></div>'}
+    </div>
+    <div class="info-note">${icon("info")}<p>«Всем» переводит на версию и тестовые ключи. Старые установки hrs, которым версия не подходит, получают последнюю подходящую и подсказку обновиться.</p></div>`;
 }
+
+// --- методика: черновик, маршрут, файлы, история ---
+
+const stageNumber = (stages, index) => stages[index].status === "off" ? null : stages.slice(0, index).filter((stage) => stage.status !== "off").length;
+
+function routeCopy(draft) {
+  return {
+    version: draft.manifest_version || "",
+    steps: draft.steps.map((step) => ({ ...step })),
+    stages: draft.stages.map(({ files, position, number, ...stage }) => ({ ...stage })),
+    dirty: false,
+  };
+}
+
+function checkPanel(check) {
+  if (!check) return "";
+  const item = (entry) => `<li><code>${escapeHTML(entry.code)}</code>${entry.stage ? ` · ${escapeHTML(entry.stage)}` : ""} — ${escapeHTML(entry.detail)}</li>`;
+  return `<section class="panel" id="check-panel"><h2>Проверка ${check.ok ? '<span class="badge active">Можно публиковать</span>' : '<span class="badge revoked">Есть ошибки</span>'}</h2>
+    ${check.errors.length ? `<p class="small">Ошибки не дают опубликовать:</p><ul class="issues">${check.errors.map(item).join("")}</ul>` : ""}
+    ${check.findings.length ? `<details><summary class="small">Замечания: ${check.findings.length}. Публикации не мешают</summary><ul class="issues">${check.findings.map(item).join("")}</ul></details>` : ""}
+    ${check.ok && !check.findings.length ? '<p class="muted">Ошибок и замечаний нет.</p>' : ""}</section>`;
+}
+
+function routePanel() {
+  const route = data.route;
+  const option = (value, title, selected) => `<option value="${escapeHTML(value)}" ${value === selected ? "selected" : ""}>${escapeHTML(title)}</option>`;
+  const rows = route.stages.map((stage, i) => {
+    const number = stageNumber(route.stages, i);
+    const files = data.draft.stages.find((saved) => saved.id === stage.id)?.files.length || 0;
+    return `<tr class="${stage.status === "off" ? "off" : ""}" data-stage="${i}">
+      <td class="mono">${number === null ? "—" : number}</td>
+      <td><input data-field="title" value="${escapeHTML(stage.title || "")}" aria-label="Название этапа ${escapeHTML(stage.id)}" maxlength="120"></td>
+      <td>${files ? `<a class="mono small" href="#edit/${encodeURIComponent(`${stage.dir}/SKILL.md`)}">${escapeHTML(stage.id)}</a><br><small class="muted">Файлов: ${files}</small>` : `<span class="mono small">${escapeHTML(stage.id)}</span><br><small class="muted">Новый этап</small>`}</td>
+      <td><select data-field="step" aria-label="Шаг этапа ${escapeHTML(stage.id)}">${route.steps.map((step) => option(step.id, step.title, stage.step)).join("")}${route.steps.some((step) => step.id === stage.step) ? "" : option(stage.step || "", `Нет шага «${stage.step || ""}»`, stage.step || "")}</select></td>
+      <td><select data-field="progress" aria-label="Чем отмечается прогресс этапа ${escapeHTML(stage.id)}">${option("", "—", stage.progress || "")}${Object.entries(progressNames).map(([id, title]) => option(id, title, stage.progress || "")).join("")}</select></td>
+      <td><label class="check"><input type="checkbox" data-field="on" ${stage.status === "off" ? "" : "checked"}> Включён</label></td>
+      <td><div class="actions"><button class="button ghost" data-action="stage-up" aria-label="Выше" ${i ? "" : "disabled"}>↑</button><button class="button ghost" data-action="stage-down" aria-label="Ниже" ${i < route.stages.length - 1 ? "" : "disabled"}>↓</button><button class="button ghost" data-action="stage-remove" aria-label="Убрать этап ${escapeHTML(stage.id)} из маршрута">${icon("close")}</button></div></td></tr>`;
+  }).join("");
+  const steps = route.steps.map((step, i) => `<li data-step="${i}"><input data-field="step-title" value="${escapeHTML(step.title || "")}" aria-label="Название шага ${escapeHTML(step.id)}" maxlength="80"><code>${escapeHTML(step.id)}</code>
+    <span class="muted small">Этапов: ${route.stages.filter((stage) => stage.step === step.id).length}</span>
+    <button class="button ghost" data-action="step-remove" aria-label="Убрать шаг ${escapeHTML(step.id)}" ${route.stages.some((stage) => stage.step === step.id) ? "disabled" : ""}>${icon("close")}</button></li>`).join("");
+  return `<div class="panel-heading"><h2>Маршрут <span class="muted">включено этапов: ${route.stages.filter((stage) => stage.status !== "off").length}</span></h2>
+      <div class="actions"><button class="button" data-action="step-add">${icon("plus")}Шаг</button><button class="button" data-action="stage-add">${icon("plus")}Этап</button></div></div>
+    <p class="small muted">Агент идёт по включённым этапам сверху вниз; номер этапа — его место в маршруте. Шаги — крупные группы, их видит пользователь. Выключенный или убранный этап остаётся в файлах черновика.</p>
+    <ol class="steps">${steps}</ol>
+    <div class="table-wrap" role="region" aria-label="Этапы методики, прокручивается по горизонтали" tabindex="0">
+      <table class="route"><thead><tr><th scope="col">№</th><th scope="col">Название</th><th scope="col">Папка</th><th scope="col">Шаг</th><th scope="col">Прогресс</th><th scope="col">Статус</th><th scope="col">Порядок</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="form-row route-save"><div class="field"><label for="route-version">Версия методики</label><input id="route-version" data-field="version" value="${escapeHTML(route.version)}" maxlength="40" placeholder="0.5.0"></div>
+      <div class="dialog-actions"><span class="small muted" role="status">${route.dirty ? "Есть несохранённые изменения" : ""}</span><button class="button" data-action="route-reset" ${route.dirty ? "" : "disabled"}>Отменить</button><button class="button primary" data-action="route-save" ${route.dirty ? "" : "disabled"}>Сохранить маршрут</button></div></div>`;
+}
+
+function updateRoute() {
+  document.getElementById("route-panel").innerHTML = routePanel();
+}
+
+function fileGroups(draft) {
+  const groups = [];
+  const taken = new Set();
+  const add = (title, files) => { if (files.length) { groups.push([title, files]); files.forEach((file) => taken.add(file.path)); } };
+  add("Главный промпт и маршрут", draft.files.filter((file) => file.path === GENESIS || file.path === MANIFEST || file.path.startsWith("agent/")));
+  draft.stages.forEach((stage, i) => add(`${stageNumber(draft.stages, i) ?? "—"} · ${stage.title || stage.id}`, draft.files.filter((file) => stage.files.includes(file.path) && !taken.has(file.path))));
+  add("Остальные файлы", draft.files.filter((file) => !taken.has(file.path)));
+  return groups;
+}
+
+function renderMethodology(draft, revisions) {
+  data.draft = draft;
+  data.route = routeCopy(draft);
+  const head = draft.head;
+  const current = Object.entries(draft.current || {}).map(([channel, version]) => `${channelNames[channel]}: <span class="mono">v${escapeHTML(version)}</span>`).join(" · ");
+  const publish = `<button class="button" data-action="publish" data-channel="test">Опубликовать тестовым</button><button class="button primary" data-action="publish" data-channel="stable">Опубликовать всем</button>`;
+  mainEl().innerHTML = `<div class="page-heading"><div><h1>Методика</h1><p>${head ? `Черновик: версия ${head.id} от ${dateTime(head.at)}, ${head.files} файлов.` : "Черновик пуст."} ${current ? `Сейчас у пользователей — ${current}.` : "Пользователи пока ничего не получили."}</p></div>
+      ${head ? `<div class="actions">${publish}</div>` : ""}</div>
+    ${head ? "" : `<div class="info-note">${icon("info")}<p>Начните с загрузки библиотеки (zip) ниже или возьмите опубликованную версию. Старая библиотека с папками stage-00…25 подходит: маршрут и главный промпт добавятся сами.</p></div>`}
+    ${checkPanel(draft.check)}
+    ${head ? `<section class="panel" id="route-panel">${routePanel()}</section>` : ""}
+    ${head ? `<section class="panel"><div class="panel-heading"><h2>Файлы <span class="muted">${draft.files.length}</span></h2><div class="actions"><button class="button" data-action="file-new">${icon("plus")}Новый файл</button></div></div>
+      ${fileGroups(draft).map(([title, files]) => `<details class="files"><summary>${escapeHTML(title)} <span class="muted small">${files.length}</span></summary><ul>${files.map((file) => `<li><a class="mono small" href="#edit/${encodeURIComponent(file.path)}">${escapeHTML(file.path)}</a> <span class="muted small">${(file.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</span></li>`).join("")}</ul></details>`).join("")}</section>` : ""}
+    <section class="panel upload"><h2>Загрузить</h2>
+      <form id="draft-upload-form"><div class="field"><label for="draft-file">Файл или архив zip</label><input id="draft-file" name="file" type="file" required><small>Архив zip целиком заменяет черновик: прежний останется в истории. Отдельный файл добавляется или заменяет файл с тем же путём.</small></div>
+        <div class="field"><label for="draft-path">Путь для отдельного файла</label><input id="draft-path" name="path" placeholder="skills/salary-talk/references/примеры.md" maxlength="300" spellcheck="false"><small>Пусто — файл ляжет в корень под своим именем.</small></div>
+        <p class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions"><button type="button" class="button" data-action="import-current">Взять опубликованную версию</button>${head ? '<button type="button" class="button" data-action="export">Скачать черновик</button>' : ""}<button type="submit" class="button primary">${icon("upload")}Загрузить</button></div></form></section>
+    ${revisions.length ? `<section class="panel"><h2>История черновика</h2><ol class="timeline revisions">${revisions.map((rev, i) => `<li><span><strong>Версия ${rev.id}</strong> · ${escapeHTML(rev.message)} <span class="muted small">${escapeHTML(roleNames[rev.by] || rev.by)}, файлов: ${rev.files}</span></span>
+      <span class="actions"><time datetime="${escapeHTML(rev.at)}">${dateTime(rev.at)}</time><button class="button ghost" data-action="diff" data-rev="${rev.id}">Изменения</button>${i ? `<button class="button ghost" data-action="restore-rev" data-rev="${rev.id}">Вернуть</button>` : ""}</span></li>`).join("")}</ol></section>` : ""}`;
+}
+
+function renderFile(file, { genesis = false } = {}) {
+  data.file = file;
+  const fixed = file.path === GENESIS || file.path === MANIFEST;
+  const heading = genesis
+    ? `<div class="page-heading"><div><h1>Главный промпт</h1><p>Правила, по которым агент (Claude Code, Codex и другие) ведёт кандидата через все этапы. Агент читает их первыми; они главнее текста навыка в установке. К пользователям попадают после публикации.</p></div>
+        <div class="actions"><button class="button" data-action="publish" data-channel="test">Опубликовать тестовым</button><button class="button primary" data-action="publish" data-channel="stable">Опубликовать всем</button></div></div>`
+    : `<a class="back-link" href="#methodology">${icon("back")}Методика</a>
+      <div class="page-heading detail-heading"><div><h1 class="mono">${escapeHTML(file.path)}</h1>${file.isNew ? '<span class="badge expiring">Новый файл</span>' : ""}</div></div>`;
+  mainEl().innerHTML = `${heading}
+    <form id="file-form" class="panel editor-form">
+      <div class="field"><label for="file-text">${genesis ? `<code>${GENESIS}</code>` : "Текст"}${file.isNew ? "" : ` <span class="muted small">${(file.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</span>`}</label><textarea id="file-text" name="text" class="editor" spellcheck="false"></textarea></div>
+      <div class="field"><label for="file-message">Что изменилось</label><input id="file-message" name="message" maxlength="200" placeholder="Необязательно: попадёт в историю"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions">${file.isNew || fixed ? "" : '<button type="button" class="button danger" data-action="file-delete">Удалить файл</button>'}<button type="submit" class="button primary">Сохранить</button></div>
+    </form>
+    <div class="info-note">${icon("info")}<p>Сохранение создаёт новую версию черновика; прежнюю можно вернуть в истории раздела «Методика». Если файл успели изменить в другой вкладке, сохранение не перезапишет чужую правку.</p></div>`;
+  document.getElementById("file-text").value = file.text;
+}
+
+function renderNoGenesis() {
+  mainEl().innerHTML = `<div class="empty"><h1>Главного промпта пока нет</h1><p class="muted">Он появится, когда в черновик загрузят библиотеку методики.</p><a class="button" href="#methodology">Открыть методику</a></div>`;
+}
+
+// Построчное сравнение для окна «Изменения»; большие файлы показываются целиком до и после.
+function lineDiff(before, after) {
+  const a = (before ?? "").split("\n");
+  const b = (after ?? "").split("\n");
+  if (a.length * b.length > 4_000_000) return [...a.map((line) => ["-", line]), ...b.map((line) => ["+", line])];
+  const lcs = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { out.push([" ", a[i]]); i++; j++; }
+    else if (j < b.length && (i === a.length || lcs[i][j + 1] > lcs[i + 1][j])) out.push(["+", b[j++]]);
+    else out.push(["-", a[i++]]);
+  }
+  // Неизменённые строки сворачиваются: остаются по три вокруг правок, пропуск отмечен «…».
+  const near = out.map((_, k) => out.slice(Math.max(0, k - 3), k + 4).some(([mark]) => mark !== " "));
+  return out.flatMap((line, k) => near[k] ? [line] : near[k - 1] || k === 0 ? [[" ", "…"]] : []);
+}
+
+function showDiff(revision, changes) {
+  const body = changes.length ? changes.map((change) => `<details class="diff-file" ${changes.length < 4 ? "open" : ""}><summary><span class="badge ${change.change === "removed" ? "revoked" : change.change === "added" ? "active" : "neutral"}">${changeNames[change.change]}</span> <span class="mono small">${escapeHTML(change.path)}</span></summary>
+    ${"after" in change ? `<pre class="diff">${lineDiff(change.before, change.after).map(([mark, line]) => `<span class="${mark === "+" ? "add" : mark === "-" ? "del" : ""}">${mark} ${escapeHTML(line)}</span>`).join("\n")}</pre>` : '<p class="small muted">Двоичный файл.</p>'}</details>`).join("") : '<p class="muted">Файлы не менялись.</p>';
+  openDialog(`Изменения в версии ${revision}`, "По сравнению с предыдущей версией черновика.", `<div class="diff-list">${body}</div><div class="dialog-actions"><button class="button" data-action="close">Закрыть</button></div>`);
+}
+
+function showPublish(channel) {
+  const check = data.draft?.check;
+  openDialog(channel === "test" ? "Опубликовать для тестовых ключей" : "Опубликовать для всех", channel === "test"
+    ? "Новую версию получат только ключи, отмеченные как тестовые. Остальные остаются на текущей."
+    : "Новую версию получат все пользователи при следующей проверке ключа. Откатить можно в разделе «Версии».", `<form id="publish-form" data-channel="${channel}">
+    ${check && !check.ok ? '<p class="warning-note">В проверке есть ошибки: сервер не опубликует черновик, пока их не исправят.</p>' : ""}
+    <div class="field"><label for="publish-note">Комментарий к версии</label><input id="publish-note" name="note" maxlength="200" placeholder="Например, новый этап про зарплату" autofocus></div>
+    ${formActions("Опубликовать")}</form>`);
+}
+
+function showStageAdd() {
+  const steps = data.route.steps;
+  if (!steps.length) { notice("Сначала добавьте шаг."); return; }
+  openDialog("Новый этап", "Этап встанет в конец маршрута; перенесите его стрелками. Сервер создаст для него SKILL.md и процедуру по шаблону.", `<form id="stage-form">
+    <div class="field"><label for="stage-title">Название</label><input id="stage-title" name="title" maxlength="120" required autofocus></div>
+    <div class="field"><label for="stage-id">Папка (латиница, цифры, дефис)</label><input id="stage-id" name="code" maxlength="63" required pattern="[a-z0-9][a-z0-9\\-]*" placeholder="salary-talk" spellcheck="false"><small>Агент и hrs узнают этап по ней; после сохранения не меняется.</small></div>
+    <div class="field"><label for="stage-step">Шаг</label><select id="stage-step" name="step">${steps.map((step) => `<option value="${escapeHTML(step.id)}">${escapeHTML(step.title)}</option>`).join("")}</select></div>
+    ${formActions("Добавить")}</form>`);
+}
+
+function showStepAdd() {
+  openDialog("Новый шаг", "Шаг — крупная группа этапов, которую видит пользователь.", `<form id="step-form">
+    <div class="field"><label for="step-title">Название</label><input id="step-title" name="title" maxlength="80" required autofocus></div>
+    <div class="field"><label for="step-id">Код (латиница, цифры, дефис)</label><input id="step-id" name="code" maxlength="63" required pattern="[a-z0-9][a-z0-9\\-]*" placeholder="interviews" spellcheck="false"></div>
+    ${formActions("Добавить")}</form>`);
+}
+
+function showFileNew() {
+  openDialog("Новый файл", "Путь внутри методики, например папка этапа и имя файла.", `<form id="file-new-form">
+    <div class="field"><label for="new-path">Путь</label><input id="new-path" name="path" maxlength="300" required placeholder="skills/salary-talk/references/примеры.md" spellcheck="false" autofocus></div>
+    ${formActions("Открыть редактор")}</form>`);
+}
+
+function showRestore(revision) {
+  openDialog(`Вернуть версию ${revision}`, "Черновик станет таким, как в этой версии. Это новая версия: текущую тоже можно будет вернуть.", `<form id="restore-form" data-rev="${revision}">${formActions("Вернуть", true)}</form>`);
+}
+
+function showFileDelete(file) {
+  openDialog("Удалить файл", `${escapeHTML(file.path)} пропадёт из черновика. Вернуть можно из истории.`, `<form id="file-delete-form">${formActions("Удалить", true)}</form>`);
+}
+
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+function addStage(fields) {
+  const id = String(fields.get("code") || "").trim();
+  const title = String(fields.get("title") || "").trim();
+  if (!ID_RE.test(id)) throw new Error("Папка: латинские строчные буквы, цифры и дефис.");
+  if (data.route.stages.some((stage) => stage.id === id)) throw new Error(`Этап «${id}» уже есть.`);
+  if (!title) throw new Error("Укажите название этапа.");
+  data.route.stages.push({ id, title, step: fields.get("step"), tools: [] });
+  data.route.dirty = true;
+}
+
+function addStep(fields) {
+  const id = String(fields.get("code") || "").trim();
+  const title = String(fields.get("title") || "").trim();
+  if (!ID_RE.test(id)) throw new Error("Код: латинские строчные буквы, цифры и дефис.");
+  if (data.route.steps.some((step) => step.id === id)) throw new Error(`Шаг «${id}» уже есть.`);
+  if (!title) throw new Error("Укажите название шага.");
+  data.route.steps.push({ id, title });
+  data.route.dirty = true;
+}
+
+function routeBody() {
+  const route = data.route;
+  return {
+    steps: route.steps.map((step) => ({ id: step.id, title: step.title })),
+    stages: route.stages.map((stage) => ({ ...stage })),
+    ...(route.version.trim() ? { version: route.version.trim() } : {}),
+  };
+}
+
+function editRoute(target) {
+  const field = target.dataset.field;
+  if (field === "version") data.route.version = target.value;
+  else if (field === "step-title") data.route.steps[Number(target.closest("[data-step]").dataset.step)].title = target.value;
+  else {
+    const stage = data.route.stages[Number(target.closest("[data-stage]").dataset.stage)];
+    if (field === "on") { if (target.checked) delete stage.status; else stage.status = "off"; }
+    else if (field === "progress" && !target.value) delete stage.progress;
+    else stage[field] = target.value;
+  }
+  data.route.dirty = true;
+}
+
+function moveStage(index, by) {
+  const stages = data.route.stages;
+  const to = index + by;
+  if (to < 0 || to >= stages.length) return;
+  [stages[index], stages[to]] = [stages[to], stages[index]];
+  data.route.dirty = true;
+  updateRoute();
+}
+
+async function download(path, filename) {
+  const response = await fetch(apiUrl(path), { headers: { Authorization: `Bearer ${readToken()}` }, cache: "no-store" });
+  if (!response.ok) throw new Error(`Сервер ключей ответил ошибкой ${response.status}.`);
+  const url = URL.createObjectURL(await response.blob());
+  const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const PAGES = ["tariffs", "bundles", "methodology", "genesis"];
 
 async function render() {
   const seq = ++renderSeq;
   if (!readToken()) { renderLogin(); return; }
+  if (!data.role) {
+    try {
+      data.role = (await api("/whoami")).role;
+    } catch (failure) {
+      if (seq !== renderSeq) return;
+      if (failure instanceof AuthError) logout(failure.message);
+      else renderLogin(failure.message);
+      return;
+    }
+    if (seq !== renderSeq) return;
+  }
   const route = window.location.hash.slice(1);
-  const page = route === "tariffs" || route === "bundles" ? route : route.startsWith("key-") ? "key" : "keys";
+  let page = PAGES.includes(route) ? route : route.startsWith("edit/") ? "edit" : route.startsWith("key-") ? "key" : "keys";
+  if (data.role !== "admin" && ["keys", "key", "tariffs"].includes(page)) page = "methodology";
   setNav(page);
   mainEl().innerHTML = '<p class="muted loading" role="status">Загрузка…</p>';
   let draw;
@@ -338,6 +613,17 @@ async function render() {
     } else if (page === "tariffs") {
       const tariffs = await api("/tariffs");
       draw = () => { data.tariffs = tariffs; renderTariffs(); };
+    } else if (page === "methodology") {
+      const [draft, revisions] = await Promise.all([api("/methodology"), api("/methodology/revisions?limit=50")]);
+      draw = () => renderMethodology(draft, revisions);
+    } else if (page === "edit" || page === "genesis") {
+      const path = page === "genesis" ? GENESIS : decodeURIComponent(route.slice(5));
+      const pending = data.file?.isNew && data.file.path === path ? data.file : null;
+      const file = pending || await api(`/methodology/file?path=${encodeURIComponent(path)}`).catch((failure) => {
+        if (failure.status === 404 && page === "genesis") return null;
+        throw failure;
+      });
+      draw = () => file ? renderFile(file, { genesis: page === "genesis" }) : renderNoGenesis();
     } else {
       const bundles = await api("/bundles");
       draw = () => renderBundles(bundles);
@@ -350,8 +636,9 @@ async function render() {
   }
   if (seq !== renderSeq) return;
   if (page !== "key") data.current = null;
+  if (page !== "edit" && page !== "genesis") data.file = null;
   draw();
-  if (data.stats) document.getElementById("nav-count").textContent = data.stats.keys;
+  if (data.stats && data.role === "admin") document.getElementById("nav-count").textContent = data.stats.keys;
 }
 
 // --- окна ---
@@ -410,6 +697,48 @@ function showIssued(key) {
 }
 
 // --- действия ---
+
+// Окна раздела «Методика». false — форма не отсюда.
+async function submitMethodology(form) {
+  const fields = new FormData(form);
+  if (form.id === "stage-form" || form.id === "step-form") {
+    if (form.id === "stage-form") addStage(fields); else addStep(fields);
+    dialog.close();
+    updateRoute();
+    notice("Добавлено. Сохраните маршрут, чтобы изменение попало в черновик.");
+    return true;
+  }
+  if (form.id === "file-new-form") {
+    const path = String(fields.get("path") || "").trim().replace(/^\/+/, "");
+    if (!path || path.split("/").some((part) => !part || part.startsWith("."))) throw new Error("Путь без «..», скрытых папок и пустых частей.");
+    if (data.draft?.files.some((file) => file.path === path)) throw new Error("Такой файл уже есть: откройте его из списка.");
+    data.file = { path, text: "", isNew: true };
+    dialog.close();
+    window.location.hash = `edit/${encodeURIComponent(path)}`;
+    return true;
+  }
+  let message;
+  if (form.id === "publish-form") {
+    const note = String(fields.get("note") || "").trim();
+    const published = await api("/methodology/publish", { method: "POST", json: { channel: form.dataset.channel, ...(note ? { note } : {}) } });
+    message = `Опубликована версия v${published.version} для: ${form.dataset.channel === "test" ? "тестовых ключей" : "всех пользователей"}.`;
+  } else if (form.id === "restore-form") {
+    const head = await api(`/methodology/revisions/${encodeURIComponent(form.dataset.rev)}/restore`, { method: "POST" });
+    message = `Версия ${form.dataset.rev} возвращена. Черновик: версия ${head.id}.`;
+  } else if (form.id === "file-delete-form") {
+    const file = data.file;
+    await api(`/methodology/file?path=${encodeURIComponent(file.path)}&base_sha=${encodeURIComponent(file.sha)}`, { method: "DELETE" });
+    message = `Файл ${file.path} удалён из черновика.`;
+    dialog.close();
+    notice(message);
+    window.location.hash = "methodology";
+    return true;
+  } else return false;
+  dialog.close();
+  notice(message);
+  await render();
+  return true;
+}
 
 async function issueKey(form) {
   const fields = new FormData(form);
@@ -470,7 +799,7 @@ async function submitMainForm(form) {
   try {
     if (form.id === "login-form") {
       writeToken(String(new FormData(form).get("token") || "").trim());
-      await api("/stats");
+      data.role = (await api("/whoami")).role;
     } else if (form.classList.contains("tariff-form")) {
       const tariff = data.tariffs.find((item) => item.id === form.dataset.id);
       const changes = changedTariffFields(tariff, new FormData(form));
@@ -480,11 +809,24 @@ async function submitMainForm(form) {
     } else if (form.id === "bundle-form") {
       const published = await api("/bundles", { method: "POST", form: new FormData(form) });
       notice(`Опубликована версия v${published.version}.`);
+    } else if (form.id === "draft-upload-form") {
+      const fields = new FormData(form);
+      const path = String(fields.get("path") || "").trim();
+      const head = await api(`/methodology/upload${path ? `?path=${encodeURIComponent(path)}` : ""}`, { method: "POST", form: fields });
+      notice(head.unchanged ? "Изменений нет: такие файлы уже в черновике." : `Загружено. Черновик: версия ${head.id}.`);
+    } else if (form.id === "file-form") {
+      const file = data.file;
+      const fields = new FormData(form);
+      const message = String(fields.get("message") || "").trim();
+      const head = await api("/methodology/file", { method: "PUT", json: { path: file.path, text: String(fields.get("text") ?? ""), base_sha: file.isNew ? null : file.sha, ...(message ? { message } : {}) } });
+      data.file = null;
+      notice(head.unchanged ? "Изменений нет." : `Сохранено. Черновик: версия ${head.id}.`);
     }
     await render();
   } catch (failure) {
     if (form.id === "login-form") {
       writeToken("");
+      data.role = null;
       error.textContent = failure.message;
       error.hidden = false;
     } else showError(error, failure);
@@ -494,9 +836,18 @@ async function submitMainForm(form) {
 
 root.addEventListener("input", (event) => {
   if (event.target.id === "search") { filters.query = event.target.value; updateList(); }
+  else if (event.target.dataset?.field && data.route) {
+    editRoute(event.target);
+    // Кнопки включаются сразу, без перерисовки: иначе потерялся бы фокус в поле.
+    ["route-save", "route-reset"].forEach((action) => { const button = document.querySelector?.(`[data-action="${action}"]`); if (button) button.disabled = false; });
+  }
 });
 root.addEventListener("change", (event) => {
-  if (event.target.id === "status-filter") { filters.status = event.target.value; render(); }
+  if (event.target.dataset?.field && data.route) {
+    editRoute(event.target);
+    if (event.target.tagName === "SELECT" || event.target.type === "checkbox") updateRoute();
+  }
+  else if (event.target.id === "status-filter") { filters.status = event.target.value; render(); }
   else if (event.target.id === "tariff-filter") { filters.tariff = event.target.value; updateList(); }
 });
 root.addEventListener("click", async (event) => {
@@ -508,6 +859,47 @@ root.addEventListener("click", async (event) => {
   else if (action === "issue") showIssue();
   else if (action === "reload") render();
   else if (action === "reset") { Object.assign(filters, { query: "", status: "all", tariff: "all" }); render(); }
+  else if (action === "publish") showPublish(button.dataset.channel);
+  else if (action === "stage-add") showStageAdd();
+  else if (action === "step-add") showStepAdd();
+  else if (action === "file-new") showFileNew();
+  else if (action === "restore-rev") showRestore(Number(button.dataset.rev));
+  else if (action === "file-delete" && data.file) showFileDelete(data.file);
+  else if (action === "stage-up" || action === "stage-down") moveStage(Number(button.closest("[data-stage]").dataset.stage), action === "stage-up" ? -1 : 1);
+  else if (action === "stage-remove") { data.route.stages.splice(Number(button.closest("[data-stage]").dataset.stage), 1); data.route.dirty = true; updateRoute(); }
+  else if (action === "step-remove") { data.route.steps.splice(Number(button.closest("[data-step]").dataset.step), 1); data.route.dirty = true; updateRoute(); }
+  else if (action === "route-reset") { data.route = routeCopy(data.draft); updateRoute(); }
+  else if (["route-save", "diff", "import-current", "export", "set-current", "toggle-channel"].includes(action)) {
+    button.disabled = true;
+    try {
+      if (action === "route-save") {
+        const head = await api("/methodology/route", { method: "PUT", json: routeBody() });
+        notice(head.unchanged ? "Изменений нет." : `Маршрут сохранён. Черновик: версия ${head.id}.`);
+      } else if (action === "diff") {
+        showDiff(button.dataset.rev, await api(`/methodology/revisions/${encodeURIComponent(button.dataset.rev)}/diff`));
+        button.disabled = false;
+        return;
+      } else if (action === "import-current") {
+        const head = await api("/methodology/import-current", { method: "POST" });
+        notice(head.unchanged ? "Черновик уже совпадает с опубликованной версией." : `${head.message}. Черновик: версия ${head.id}.`);
+      } else if (action === "export") {
+        await download("/methodology/export", "methodology-draft.zip");
+        button.disabled = false;
+        return;
+      } else if (action === "set-current") {
+        await api(`/bundles/${encodeURIComponent(button.dataset.version)}/current`, { method: "POST", json: { channel: button.dataset.channel } });
+        notice(`v${button.dataset.version} — текущая для: ${button.dataset.channel === "test" ? "тестовых ключей" : "всех пользователей"}.`);
+      } else if (action === "toggle-channel" && key) {
+        const channel = key.channel === "test" ? "stable" : "test";
+        await api(`/keys/${encodeURIComponent(key.id)}/channel`, { method: "POST", json: { channel } });
+        notice(channel === "test" ? "Ключ получает тестовые версии методики." : "Ключ получает обычные версии методики.");
+      }
+      await render();
+    } catch (failure) {
+      if (failure instanceof AuthError) logout(failure.message);
+      else { notice(failure.message); button.disabled = false; }
+    }
+  }
   else if (key && action === "extend") showExtend(key);
   else if (key && action === "revoke") showRevoke(key);
   else if (key && action === "detach") showDetach(key, button.dataset.device);
@@ -573,6 +965,7 @@ dialog.addEventListener("submit", async (event) => {
   error.hidden = true;
   try {
     if (form.id === "issue-form") { await issueKey(form); return; }
+    if (await submitMethodology(form)) return;
     const key = data.current;
     if (!key) throw new Error("Ключ не найден.");
     const fields = new FormData(form);

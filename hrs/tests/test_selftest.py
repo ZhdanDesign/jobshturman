@@ -9,7 +9,7 @@ from hrs_keys import bundle
 
 from hrs_cli import main, selftest, watermark
 
-LIBRARY = (Path(__file__).resolve().parents[2] / "Метапроект_поиска_работы_—_ТЗ_и_библиотека" / "ФИНАЛЬНОЕ"
+LIBRARY = (Path(__file__).resolve().parents[2] / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ"
            / "MD библиотека" / "Библиотека навыков")
 CHANNELS = LIBRARY.parents[1] / "02 Полный реестр Telegram каналов.csv"
 # The methodology lives in the private repository; without it next to the code these tests skip.
@@ -49,8 +49,9 @@ def test_the_real_bundle_holds_its_contract(real, tools):
     assert report["stages"] == 26
     assert report["errors"] == [], report["errors"]
     assert {"stage_procedure", "intake_ask", "license_status"} <= tools
-    # Library findings are reported, never fixed by hrs: today two links point outside the bundle.
-    assert all(f["code"] in ("broken_link", "unknown_tool", "front_matter_fields") for f in report["findings"])
+    # Library findings are reported, never fixed by hrs (no_genesis: the main prompt comes with the editor).
+    assert all(f["code"] in ("broken_link", "unknown_tool", "front_matter_fields", "no_genesis")
+               for f in report["findings"])
 
 
 def test_each_check_catches_its_fault(real, tools):

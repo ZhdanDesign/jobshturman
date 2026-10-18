@@ -1,8 +1,11 @@
 # Key server next to the demo on Timeweb. Not deployed yet: announce server changes first.
-# keys.env (server only, not in git): HRS_KEYS_SECRET, HRS_KEYS_ADMIN_TOKEN, HRS_KEYS_RENEW_URL, HRS_KEYS_ADMIN_ORIGINS
+# keys.env (server only, not in git): HRS_KEYS_SECRET, HRS_KEYS_ADMIN_TOKEN, HRS_KEYS_METHODOLOGIST_TOKEN,
+# HRS_KEYS_RENEW_URL, HRS_KEYS_ADMIN_ORIGINS
 services:
   keys:
-    build: .
+    build:
+      context: ..
+      dockerfile: key-server/Dockerfile
     env_file: keys.env
     ports:
       - "127.0.0.1:8098:8098"

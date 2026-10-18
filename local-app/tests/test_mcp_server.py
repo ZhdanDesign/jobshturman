@@ -12,7 +12,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 ROOT = Path(__file__).resolve().parents[2]
-LIBRARY = ROOT / "Метапроект_поиска_работы_—_ТЗ_и_библиотека" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
+LIBRARY = ROOT / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
 
 
 def payload(result):
@@ -101,7 +101,7 @@ class McpServerTests(unittest.TestCase):
             call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
             payload(await call("vacancies_import", items=[{
                 "source": "hh", "external_id": "1", "title": "CCO", "location": "Казань", "work_format": ["ON_SITE"],
-                "salary": {"min": 300000, "max": None, "currency": "RUR", "gross": True, "period": None}}]))
+                "salary": {"min": 150000, "max": 200000, "currency": "RUR", "gross": True, "period": None}}]))
             app = payload(await call("applications_list"))[0]
             limits = payload(await call("vacancy_constraints", application_id=app["object_id"],
                                         policy={"salary_min": 400000, "formats": ["REMOTE"], "locations": ["Москва"]}))
@@ -117,6 +117,30 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(limits["hard_conflicts"], ["salary", "format", "location"])
         self.assertEqual(sorted(e["code"] for e in letter["errors"]), ["invalid_material", "missing_fact"])
         self.assertEqual([e["code"] for e in plan["errors"]], ["unknown_dependency"])
+
+    def test_screen_and_ranked_list(self):  # every vacancy shown to the person carries a 1-5 rank
+        async def scenario(s):
+            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            payload(await call("vacancies_import", items=[
+                {"source": "hh", "external_id": str(i), "title": t, "text": "описание", "salary": sal}
+                for i, (t, sal) in enumerate([
+                    ("CFO", None),
+                    ("Финдиректор", {"min": 900000, "max": None, "currency": "RUR", "period": None}),
+                    ("Бухгалтер", {"min": 90000, "max": 100000, "currency": "RUR", "period": None}),
+                    ("Директор по финансам", {"min": 1300000, "max": None, "currency": "RUR", "period": None})])]))
+            ids = {a["vacancy"]["title"]: a for a in payload(await call("applications_list"))}
+            screen = payload(await call("vacancies_screen", policy={"salary_min": 1200000}))
+            for title, rank in (("CFO", 3), ("Финдиректор", 5)):
+                a = ids[title]
+                payload(await call("application_score", application_id=a["object_id"], expected_version=a["version"],
+                                   preliminary=rank, why="по профилю", fact_ids=[]))
+            return ids, screen, payload(await call("vacancies_ranked"))
+        ids, screen, ranked = self.run_session(scenario)
+        self.assertEqual(screen["level"], "moderate")
+        self.assertEqual([d["id"] for d in screen["dropped"]], [ids["Бухгалтер"]["object_id"]])
+        self.assertEqual([r["title"] for r in ranked["ranked"]], ["Финдиректор", "CFO"])
+        self.assertEqual([r["rank"] for r in ranked["ranked"]], [5, 3])
+        self.assertEqual({u["title"] for u in ranked["unscored"]}, {"Бухгалтер", "Директор по финансам"})
 
     def test_state_survives_restart(self):  # СЦ-10: a new AI session gets the stored state
         async def first(s):

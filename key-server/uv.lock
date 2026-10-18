@@ -241,6 +241,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "hrshturman-core" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
@@ -256,6 +257,7 @@ dev = [
 requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "hrshturman-core", editable = "../core" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
@@ -266,6 +268,11 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.6" },
 ]
+
+[[package]]
+name = "hrshturman-core"
+version = "0.2.1"
+source = { editable = "../core" }
 
 [[package]]
 name = "httpcore"

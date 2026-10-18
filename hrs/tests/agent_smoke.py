@@ -29,7 +29,7 @@ from hrs_keys.app import create_app
 from hrs_keys.service import KeyServer, Settings, generate_signing_key
 
 HERE = Path(__file__).resolve().parent
-LIBRARY = HERE.parents[1] / "Метапроект_поиска_работы_—_ТЗ_и_библиотека" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
+LIBRARY = HERE.parents[1] / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
 HRS = Path(sys.executable).with_name("hrs")
 TASK = ("Это проверка JobShturman. Сделай по порядку, ничего не спрашивая у меня: 1) license_status; "
         "2) license_login с ключом {key}; 3) stage_procedure с stage_id=0, процитируй первую строку; "

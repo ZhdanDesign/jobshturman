@@ -1,0 +1,8 @@
+# The key server image (key-server/compose.yaml) needs only these two folders.
+*
+!core/hrshturman_core
+!core/pyproject.toml
+!key-server/pyproject.toml
+!key-server/hrs_keys
+**/__pycache__
+**/._*

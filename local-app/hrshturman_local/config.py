@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_LIBRARY = (PROJECT_ROOT / "Метапроект_поиска_работы_—_ТЗ_и_библиотека" / "ФИНАЛЬНОЕ"
+DEFAULT_LIBRARY = (PROJECT_ROOT / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ"
                    / "MD библиотека" / "Библиотека навыков")
 
 

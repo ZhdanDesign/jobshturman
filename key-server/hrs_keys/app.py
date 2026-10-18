@@ -1,7 +1,8 @@
 """HTTP API of the key server. See API.md.
 
-Client (hrs):  POST /v1/activate, GET /v1/status, GET /v1/bundle/latest
+Client (hrs):  POST /v1/activate, GET /v1/status, GET /v1/bundle/latest; header X-Hrs-Version
 Admin:         /v1/admin/... with `Authorization: Bearer <HRS_KEYS_ADMIN_TOKEN>`
+Methodologist: /v1/admin/methodology/... and the bundle list with a token of HRS_KEYS_METHODOLOGIST_TOKEN
 """
 import hmac
 
@@ -30,6 +31,28 @@ class Issue(BaseModel):
 class Extend(BaseModel):
     months: int | None = Field(None, ge=1, le=60)
     until: str | None = None
+
+
+class Channel(BaseModel):
+    channel: str = Field(pattern="^(stable|test)$")
+
+
+class Publish(BaseModel):
+    channel: str = Field(pattern="^(stable|test)$")
+    note: str | None = Field(None, max_length=200)
+
+
+class FileSave(BaseModel):
+    path: str = Field(max_length=300)
+    text: str = Field(max_length=2_000_000)
+    base_sha: str | None = Field(None, max_length=64)
+    message: str | None = Field(None, max_length=200)
+
+
+class RouteSave(BaseModel):
+    steps: list[dict]
+    stages: list[dict]
+    version: str | None = Field(None, max_length=40)
 
 
 class Revoke(BaseModel):
@@ -66,24 +89,37 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
     # HRS_KEYS_ADMIN_TOKEN may list several tokens, comma separated: one per admin, each revoked on its own.
     admin_tokens = [t.strip() for t in (ks.s.admin_token or "").split(",") if t.strip()]
 
-    def admin(authorization: str | None = Header(None)):
+    # The methodologist (the author of the methodology) edits and publishes it and sees nothing else.
+    method_tokens = [t.strip() for t in (ks.s.methodologist_token or "").split(",") if t.strip()]
+
+    def role_of(authorization: str | None) -> str:
         token = bearer(authorization)
-        if not any(hmac.compare_digest(token, known) for known in admin_tokens):
-            raise KeyServerError("forbidden", "Неверный токен администратора", 403)
+        if any(hmac.compare_digest(token, known) for known in admin_tokens):
+            return "admin"
+        if any(hmac.compare_digest(token, known) for known in method_tokens):
+            return "methodologist"
+        raise KeyServerError("forbidden", "Неверный токен администратора", 403)
+
+    def admin(authorization: str | None = Header(None)):
+        if role_of(authorization) != "admin":
+            raise KeyServerError("forbidden", "Этот раздел только для администратора", 403)
+
+    def editor(authorization: str | None = Header(None)) -> str:
+        return role_of(authorization)
 
     # --- client ---
 
     @app.post("/v1/activate")
-    def activate(body: Activate):
-        return ks.activate(body.key, body.install_id)
+    def activate(body: Activate, x_hrs_version: str | None = Header(None)):
+        return ks.activate(body.key, body.install_id, x_hrs_version)
 
     @app.get("/v1/status")
-    def status(authorization: str | None = Header(None)):
-        return ks.status(bearer(authorization))
+    def status(authorization: str | None = Header(None), x_hrs_version: str | None = Header(None)):
+        return ks.status(bearer(authorization), x_hrs_version)
 
     @app.get("/v1/bundle/latest")
-    def bundle(authorization: str | None = Header(None)):
-        meta, data = ks.bundle(bearer(authorization))
+    def bundle(authorization: str | None = Header(None), x_hrs_version: str | None = Header(None)):
+        meta, data = ks.bundle(bearer(authorization), x_hrs_version)
         return Response(data, media_type="application/zip", headers={
             "X-Bundle-Version": meta["version"], "X-Bundle-Sha256": meta["sha256"],
             "X-Bundle-Signature": meta["signature"],
@@ -148,9 +184,79 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
     def key_events(key_id: str, limit: int = Query(100, ge=1, le=1000)):
         return ks.events(key_id, limit)
 
-    @app.get("/v1/admin/bundles", dependencies=a)
-    def bundles():
+    @app.get("/v1/admin/whoami")
+    def whoami(role: str = Depends(editor)):
+        return {"role": role}
+
+    @app.post("/v1/admin/keys/{key_id}/channel", dependencies=a)
+    def key_channel(key_id: str, body: Channel):
+        return ks.set_channel(key_id, body.channel)
+
+    @app.get("/v1/admin/bundles")
+    def bundles(role: str = Depends(editor)):
         return ks.bundle_list()
+
+    @app.post("/v1/admin/bundles/{version}/current")
+    def bundle_current(version: str, body: Channel, role: str = Depends(editor)):
+        return ks.set_current(version, body.channel)
+
+    # --- the methodology editor ---
+
+    m = "/v1/admin/methodology"
+
+    @app.get(m)
+    def draft(role: str = Depends(editor)):
+        return ks.draft()
+
+    @app.get(m + "/file")
+    def draft_file(path: str, revision: int | None = None, role: str = Depends(editor)):
+        return ks.draft_file(path, revision)
+
+    @app.put(m + "/file")
+    def draft_save(body: FileSave, role: str = Depends(editor)):
+        return ks.draft_save(body.path, body.text, body.base_sha, role, body.message)
+
+    @app.delete(m + "/file")
+    def draft_delete(path: str, base_sha: str, role: str = Depends(editor)):
+        return ks.draft_delete(path, base_sha, role)
+
+    @app.post(m + "/upload")
+    async def draft_upload(file: UploadFile, path: str | None = Query(None, max_length=300),
+                           role: str = Depends(editor)):
+        return ks.draft_upload(file.filename or "file", await file.read(), role, path)
+
+    @app.post(m + "/import-current")
+    def draft_import(role: str = Depends(editor)):
+        return ks.draft_import_current(role)
+
+    @app.put(m + "/route")
+    def draft_route(body: RouteSave, role: str = Depends(editor)):
+        return ks.draft_route(body.steps, body.stages, role, body.version)
+
+    @app.get(m + "/revisions")
+    def draft_revisions(limit: int = Query(100, ge=1, le=1000), role: str = Depends(editor)):
+        return ks.draft_revisions(limit)
+
+    @app.get(m + "/revisions/{revision}/diff")
+    def draft_diff(revision: int, against: int | None = None, role: str = Depends(editor)):
+        return ks.draft_diff(revision, against)
+
+    @app.post(m + "/revisions/{revision}/restore")
+    def draft_restore(revision: int, role: str = Depends(editor)):
+        return ks.draft_restore(revision, role)
+
+    @app.post(m + "/check")
+    def draft_check(role: str = Depends(editor)):
+        return ks.draft_check()
+
+    @app.post(m + "/publish", status_code=201)
+    def draft_publish(body: Publish, role: str = Depends(editor)):
+        return ks.draft_publish(body.channel, role, body.note)
+
+    @app.get(m + "/export")
+    def draft_export(revision: int | None = None, role: str = Depends(editor)):
+        return Response(ks.draft_export(revision), media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="methodology-draft.zip"'})
 
     @app.post("/v1/admin/bundles", dependencies=a, status_code=201)
     async def publish(file: UploadFile):

@@ -1,6 +1,6 @@
 """Contract check of the methodology bundle as hrs delivers it. No model, no network.
 
-For each of the 26 stages: the stage is found and handed out through the same path as the
+For each stage of the manifest (any number of them): the stage is found and handed out through the same path as the
 stage_procedure tool; with the watermark stripped the text equals the source byte for byte; the
 YAML front matter, code blocks and table rows are untouched; every file a stage links to is in the
 bundle (links in the shared files are checked too); no stage carries another stage's own text. For the bundle as a whole: nothing that must
@@ -17,12 +17,11 @@ import re
 import zipfile
 from urllib.parse import unquote
 
-from hrshturman_core import DomainError
+from hrshturman_core import DomainError, methodology
 from hrshturman_local.mcp_server import stage_text
 
 from . import watermark
 
-STAGES = range(26)
 FORBIDDEN = ("*/references/acceptance.md", "references/acceptance.md", "scripts/test_*", "scripts/fixtures/*",
              "*__pycache__*", "*.pyc", "*.DS_Store", "._*", "*/._*")
 LINK = re.compile(r"\]\(([^)\s]+)\)")
@@ -56,7 +55,8 @@ class MarkedLibrary:
         return self.raw.names()
 
     def read(self, name):
-        return watermark.mark(self.raw.read(name), TEST_MARK)
+        text = self.raw.read(name)
+        return watermark.mark(text, TEST_MARK) if name.endswith(".md") else text
 
 
 def plain(text: str) -> str:
@@ -114,8 +114,25 @@ def run(bundle: bytes, tools: set[str]) -> dict:
         if any(fnmatch.fnmatch(name, p) for p in FORBIDDEN):
             error(None, "forbidden_file", name)
 
+    try:
+        stages = methodology.route(raw).stages
+    except DomainError as exc:
+        error(None, exc.code, str(exc))
+        stages = []
+    check = methodology.validate({n: (raw.read(n) if n.endswith((".md", ".json")) else "") for n in names}, tools)
+    for e in check["errors"]:
+        error(e["stage"], e["code"], e["detail"])
+    for f in check["findings"]:
+        if f["code"] not in ("broken_link", "front_matter"):  # checked below, as before
+            finding(f["stage"], f["code"], f["detail"])
+    if methodology.GENESIS in names:
+        rules = marked.read(methodology.GENESIS)
+        if plain(rules) != raw.read(methodology.GENESIS) or not FRAME.search(rules):
+            error(None, "genesis_changed", "главный промпт выдаётся не так, как написан, или без водяного знака")
+
     texts, mentioned = {}, {}
-    for n in STAGES:
+    for stage in stages:
+        n = stage.number
         try:
             source, given = stage_text(raw, n), stage_text(marked, n)
         except DomainError as exc:
@@ -128,8 +145,7 @@ def run(bundle: bytes, tools: set[str]) -> dict:
             error(n, "no_watermark", "the stage carries no watermark")
         if verbatim(given) != verbatim(source):
             error(n, "verbatim_changed", "code blocks or table rows changed")
-        folder = next(x.split("/")[1] for x in names if x.startswith(f"skills/stage-{n:02d}-"))
-        for name in sorted(x for x in names if x.startswith(f"skills/{folder}/") and x.endswith(".md")):
+        for name in sorted(x for x in stage.files(names) if x.endswith(".md")):
             text, shown = raw.read(name), marked.read(name)
             if name.endswith("SKILL.md"):
                 try:
@@ -146,13 +162,13 @@ def run(bundle: bytes, tools: set[str]) -> dict:
             finding(n, "unknown_tool", tool)
 
     for name in sorted(x for x in names if x.endswith(".md")):
-        stage = re.match(r"skills/stage-(\d\d)-", name)
+        owner = next((st.number for st in stages if name.startswith(st.dir + "/")), None)
         for target in LINK.findall(raw.read(name)):
             if re.match(r"[a-z]+:", target) or target.startswith("#"):
                 continue
             path = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(target.split("#")[0])))
             if path not in names:
-                finding(int(stage[1]) if stage else None, "broken_link", f"{name} → {target}")
+                finding(owner, "broken_link", f"{name} → {target}")
 
     own = {n: _paragraphs(t) for n, t in texts.items()}
     # Template paragraphs repeat in most stages by design; a paragraph in a few stages is a copy.
@@ -162,7 +178,7 @@ def run(bundle: bytes, tools: set[str]) -> dict:
             if m != n and (ps - shared) & other:
                 error(n, "foreign_text", f"stage {m} contains text of stage {n}")
 
-    return {"stages": len(texts), "ok": not errors, "errors": errors, "findings": findings,
+    return {"stages": len(texts), "stages_total": len(stages), "ok": not errors, "errors": errors, "findings": findings,
             "tools_mentioned": {n: t for n, t in mentioned.items() if t},
             "tools_never_mentioned": sorted(tools - {t for ts in mentioned.values() for t in ts})}
 
@@ -207,7 +223,7 @@ def tool_names() -> set[str]:
 
 
 def summary(report: dict) -> str:
-    lines = [(f"Этапов проверено: {report['stages']} из 26. Ошибок выдачи: {len(report['errors'])}. "
+    lines = [(f"Этапов проверено: {report['stages']} из {report['stages_total']}. Ошибок выдачи: {len(report['errors'])}. "
               f"Замечаний к текстам методики: {len(report['findings'])}.")]
 
     def where(item):

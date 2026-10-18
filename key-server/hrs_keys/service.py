@@ -15,13 +15,31 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from hrshturman_core import DomainError, methodology
 
-from . import watermark
+from . import bundle as bundles_mod
+from . import library, watermark
 from .db import DB
 
 TOKEN_TTL = timedelta(hours=24)
 WARN_BEFORE = timedelta(days=1)
 KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I
+CHANNELS = ("stable", "test")
+HRS_UPDATE = ("Вышла новая версия методики, но её читает только новый JobShturman. Обновите программу: "
+              "curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh")
+
+
+def version_tuple(v: str | None) -> tuple:
+    out = []
+    for part in (v or "0").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits or 0))
+    return tuple(out)
+
+
+def readable(min_hrs: str | None, client: str | None) -> bool:
+    """Can an hrs of version `client` (None: older than the header) hand out a bundle needing min_hrs."""
+    return not min_hrs or (client is not None and version_tuple(client) >= version_tuple(min_hrs))
 
 
 class KeyServerError(Exception):
@@ -37,6 +55,7 @@ class Settings:
     admin_token: str | None
     signing_key: Path
     renew_url: str
+    methodologist_token: str | None = None  # comma separated; edits and publishes the methodology only
 
     @classmethod
     def from_env(cls):
@@ -46,7 +65,8 @@ class Settings:
             raise SystemExit("HRS_KEYS_SECRET: нужна случайная строка от 32 символов")
         return cls(data=data, secret=secret.encode(), admin_token=os.environ.get("HRS_KEYS_ADMIN_TOKEN") or None,
                    signing_key=Path(os.environ.get("HRS_KEYS_SIGNING_KEY") or data / "signing_key.pem"),
-                   renew_url=os.environ.get("HRS_KEYS_RENEW_URL", "https://tools.owai.ru/jobshturman/"))
+                   renew_url=os.environ.get("HRS_KEYS_RENEW_URL", "https://tools.owai.ru/jobshturman/"),
+                   methodologist_token=os.environ.get("HRS_KEYS_METHODOLOGIST_TOKEN") or None)
 
 
 def now() -> datetime:
@@ -106,6 +126,7 @@ class KeyServer:
         self.db = DB(settings.data / "keys.sqlite3").init()
         self.bundles = settings.data / "bundles"
         self.bundles.mkdir(parents=True, exist_ok=True)
+        self.library = library.Library(self.db, settings.data / "library")
 
     def _tx(self):
         return self.db.tx(keep_on=KeyServerError)
@@ -141,11 +162,30 @@ class KeyServer:
             self._log(c, row["id"], "denied", "expired")
             raise KeyServerError("key_expired", f"Срок ключа закончился. Продлить: {self.s.renew_url}", 403)
 
-    def _status(self, c, row) -> dict:
+    def _pick(self, c, channel: str, client: str | None):
+        """The bundle a key of this channel gets with this hrs: the channel's current version, else the
+        newest one; if this hrs cannot read it, the newest it can. Returns (row, hrs_update_needed)."""
+        row = None
+        for ch in ([channel] if channel == "stable" else [channel, "stable"]):
+            row = c.execute("SELECT b.* FROM current_bundle cur JOIN bundles b ON b.version = cur.version"
+                            " WHERE cur.channel = ?", (ch,)).fetchone()
+            if row:
+                break
+        row = row or c.execute("SELECT * FROM bundles ORDER BY published_at DESC, rowid DESC LIMIT 1").fetchone()
+        if row is None or readable(row["min_hrs"], client):
+            return row, False
+        for older in c.execute("SELECT * FROM bundles WHERE published_at <= ? ORDER BY published_at DESC, rowid DESC",
+                               (row["published_at"],)):
+            if readable(older["min_hrs"], client):
+                return older, True
+        return None, True
+
+    def _status(self, c, row, client: str | None = None) -> dict:
         expires = parse(row["expires_at"])
         left = expires - now()
         tariff = c.execute("SELECT id, title FROM tariffs WHERE id = ?", (row["tariff_id"],)).fetchone()
-        latest = c.execute("SELECT version, sha256 FROM bundles ORDER BY published_at DESC, rowid DESC LIMIT 1").fetchone()
+        picked, update = self._pick(c, row["channel"], client)
+        latest = {"version": picked["version"], "sha256": picked["sha256"]} if picked else None
         expiring = left <= WARN_BEFORE
         return {
             "key_hint": row["key_hint"], "tariff": dict(tariff), "expires_at": row["expires_at"],
@@ -153,7 +193,8 @@ class KeyServer:
             "renew_url": self.s.renew_url,
             "warning": (f"Ключ действует до {row['expires_at'][:10]}. Продлите его, чтобы методика не отключилась: "
                         f"{self.s.renew_url}") if expiring else None,
-            "bundle": dict(latest) if latest else None,
+            "bundle": latest,
+            "hrs_update": HRS_UPDATE if update else None,
             "watermark": watermark.key_id(row["key_hash"]),
         }
 
@@ -167,7 +208,7 @@ class KeyServer:
 
     # --- public API ---
 
-    def activate(self, key: str, install_id: str) -> dict:
+    def activate(self, key: str, install_id: str, client: str | None = None) -> dict:
         if not install_id or len(install_id) > 100:
             raise KeyServerError("invalid_request", "install_id обязателен")
         with self._tx() as c:
@@ -191,22 +232,22 @@ class KeyServer:
             self._log(c, row["id"], "activate")
             expires = min(now() + TOKEN_TTL, parse(row["expires_at"]))
             return {"token": self._token(row["id"], install_hash, expires), "token_expires_at": iso(expires),
-                    **self._status(c, row)}
+                    **self._status(c, row, client)}
 
-    def status(self, token: str) -> dict:
+    def status(self, token: str, client: str | None = None) -> dict:
         with self._tx() as c:
             row, install_hash = self._row_by_token(c, token)
             self._check_usable(c, row)
             c.execute("UPDATE activations SET last_seen = ? WHERE key_id = ? AND install_hash = ?",
                       (iso(now()), row["id"], install_hash))
             self._log(c, row["id"], "check")
-            return self._status(c, row)
+            return self._status(c, row, client)
 
-    def bundle(self, token: str) -> tuple[dict, bytes]:
+    def bundle(self, token: str, client: str | None = None) -> tuple[dict, bytes]:
         with self._tx() as c:
             row, _ = self._row_by_token(c, token)
             self._check_usable(c, row)
-            latest = c.execute("SELECT * FROM bundles ORDER BY published_at DESC, rowid DESC LIMIT 1").fetchone()
+            latest, _ = self._pick(c, row["channel"], client)
             if latest is None:
                 raise KeyServerError("no_bundle", "Методика ещё не опубликована", 404)
             self._log(c, row["id"], "download", latest["version"])
@@ -356,8 +397,10 @@ class KeyServer:
     def public_key(self) -> str:
         return public_key_b64(self._signer())
 
-    def publish(self, data: bytes) -> dict:
-        """Publish a bundle built by `hrs-keys bundle build`; its version comes from bundle.json inside."""
+    def publish(self, data: bytes, channel: str | None = "stable", revision: int | None = None,
+                note: str | None = None) -> dict:
+        """Publish a bundle built by `hrs-keys bundle build` or from the draft; its version comes from
+        bundle.json inside. channel: who gets it now (stable: everyone, test: test keys); None: nobody yet."""
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 meta = json.loads(z.read("bundle.json"))
@@ -366,25 +409,256 @@ class KeyServer:
         version = str(meta.get("version", ""))
         if not version or "/" in version or version.startswith("."):
             raise KeyServerError("invalid_bundle", "В bundle.json нет корректной version")
+        if channel not in (None, *CHANNELS):
+            raise KeyServerError("invalid_request", "channel: stable или test")
         signature = base64.b64encode(self._signer().sign(data)).decode()
         with self._tx() as c:
             if c.execute("SELECT 1 FROM bundles WHERE version = ?", (version,)).fetchone():
                 raise KeyServerError("bundle_exists", f"Версия {version} уже опубликована", 409)
             (self.bundles / f"{version}.zip").write_bytes(data)
-            c.execute("INSERT INTO bundles VALUES (?, ?, ?, ?, ?)",
-                      (version, hashlib.sha256(data).hexdigest(), len(data), signature, iso(now())))
-            self._log(c, None, "admin", f"publish {version}")
-            return dict(c.execute("SELECT * FROM bundles WHERE version = ?", (version,)).fetchone())
+            c.execute("INSERT INTO bundles (version, sha256, size, signature, published_at, format, min_hrs, revision,"
+                      " note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      (version, hashlib.sha256(data).hexdigest(), len(data), signature, iso(now()),
+                       int(meta.get("format") or 1), meta.get("min_hrs"), revision, (note or "")[:200] or None))
+            self._log(c, None, "admin", f"publish {version}" + (f" to {channel}" if channel else ""))
+            if channel:
+                self._set_current(c, version, channel)
+            return self._bundle_view(c, version)
+
+    def _set_current(self, c, version: str, channel: str):
+        """stable moves both channels: test keys never get an older version than everyone."""
+        for ch in (CHANNELS if channel == "stable" else (channel,)):
+            c.execute("INSERT INTO current_bundle (channel, version) VALUES (?, ?)"
+                      " ON CONFLICT(channel) DO UPDATE SET version = excluded.version", (ch, version))
+
+    def set_current(self, version: str, channel: str) -> dict:
+        """Give a published version to a channel: promote a tested one to everyone, or roll back."""
+        if channel not in CHANNELS:
+            raise KeyServerError("invalid_request", "channel: stable или test")
+        with self._tx() as c:
+            if not c.execute("SELECT 1 FROM bundles WHERE version = ?", (version,)).fetchone():
+                raise KeyServerError("not_found", f"Нет версии {version}", 404)
+            self._set_current(c, version, channel)
+            self._log(c, None, "admin", f"current {channel} = {version}")
+            return self._bundle_view(c, version)
+
+    def _bundle_view(self, c, version: str) -> dict:
+        row = dict(c.execute("SELECT * FROM bundles WHERE version = ?", (version,)).fetchone())
+        row["channels"] = [r[0] for r in c.execute("SELECT channel FROM current_bundle WHERE version = ?"
+                                                    " ORDER BY channel", (version,))]
+        return row
 
     def bundle_list(self) -> list[dict]:
         with self._tx() as c:
-            return [dict(r) for r in c.execute("SELECT * FROM bundles ORDER BY published_at DESC, rowid DESC")]
+            versions = [r[0] for r in c.execute("SELECT version FROM bundles ORDER BY published_at DESC, rowid DESC")]
+            return [self._bundle_view(c, v) for v in versions]
+
+    def set_channel(self, key_id: str, channel: str) -> dict:
+        """test: this key gets versions published for checking before everyone else."""
+        if channel not in CHANNELS:
+            raise KeyServerError("invalid_request", "channel: stable или test")
+        with self._tx() as c:
+            self._key_view(c, key_id)
+            c.execute("UPDATE keys SET channel = ? WHERE id = ?", (channel, key_id))
+            self._log(c, key_id, "admin", f"channel {channel}")
+            return self._key_view(c, key_id)
+
+    # --- the methodology draft (the editor in the admin page) ---
+
+    def _lib(self, fn):
+        try:
+            with self._tx() as c:
+                return fn(c)
+        except library.LibraryError as exc:
+            raise KeyServerError(exc.code, str(exc), exc.status) from exc
+
+    def _draft_manifest(self, c) -> dict:
+        tree = self.library.tree(c)
+        if methodology.MANIFEST not in tree:
+            return {}
+        try:
+            return json.loads(self.library.blob(tree[methodology.MANIFEST]))
+        except ValueError:
+            return {}
+
+    def draft(self) -> dict:
+        """The draft as the editor shows it: files, the route (steps, stages with numbers) and the check."""
+        def go(c):
+            tree = self.library.tree(c)
+            files = {p: self.library.blob(d) for p, d in tree.items()}
+            lib = bundles_mod._Files(files)
+            try:
+                route = methodology.route(lib).public() if files else None
+            except (DomainError, KeyError, ValueError) as exc:  # broken manifest: the check names it
+                route = {"error": str(exc)}
+            manifest = self._draft_manifest(c)
+            stages = []
+            for i, st in enumerate(manifest.get("stages") or []):
+                d = (st.get("dir") or "").rstrip("/")
+                stages.append(st | {"files": sorted(p for p in tree if p.startswith(d + "/")) if d else [],
+                                    "position": i})
+            current = {r["channel"]: r["version"] for r in c.execute("SELECT * FROM current_bundle")}
+            return {"head": self.library.head(c), "files": [{"path": p, "sha": d, "size": len(files[p])}
+                                                             for p, d in sorted(tree.items())],
+                    "route": route, "steps": manifest.get("steps") or [], "stages": stages,
+                    "manifest_version": manifest.get("version"), "current": current,
+                    "check": self._check(files) if files else None,
+                    "genesis": methodology.GENESIS}
+        return self._lib(go)
+
+    @classmethod
+    def _check(cls, files: dict[str, bytes]) -> dict:
+        """The methodology check plus ours: the main prompt must be the author's text, not the placeholder."""
+        report = methodology.validate(cls._texts(files))
+        if library.is_placeholder(files.get(methodology.GENESIS)):
+            report["errors"].append({"code": "genesis_placeholder", "stage": None,
+                                     "detail": f"{methodology.GENESIS}: вместо главных правил заглушка"})
+            report["ok"] = False
+        return report
+
+    def _published_genesis(self) -> bytes | None:
+        """The main prompt of the version everyone gets now, if it has one."""
+        with self._tx() as c:
+            row, _ = self._pick(c, "stable", "999")
+        if row is None:
+            return None
+        try:
+            return library.unzip((self.bundles / f"{row['version']}.zip").read_bytes()).get(methodology.GENESIS)
+        except (OSError, library.LibraryError):
+            return None
+
+    @staticmethod
+    def _texts(files: dict[str, bytes]) -> dict[str, str]:
+        return {p: (d.decode("utf-8", "replace") if p.endswith((".md", ".json")) else "") for p, d in files.items()}
+
+    def draft_file(self, path: str, revision: int | None = None) -> dict:
+        def go(c):
+            tree = self.library.tree(c, revision)
+            p = library.clean_path(path)
+            if p not in tree:
+                raise library.LibraryError("not_found", f"Нет файла {p}", 404)
+            data = self.library.blob(tree[p])
+            return {"path": p, "sha": tree[p], "text": data.decode("utf-8", "replace"), "size": len(data)}
+        return self._lib(go)
+
+    def draft_save(self, path: str, text: str, base_sha: str | None, by: str, message: str | None = None) -> dict:
+        """Save one file. base_sha: the version the editor opened (None for a new file)."""
+        return self._lib(lambda c: self.library.change(
+            c, {path: text.encode("utf-8")}, by, message or f"Правка {path}", iso(now()), expected={path: base_sha}))
+
+    def draft_delete(self, path: str, base_sha: str | None, by: str) -> dict:
+        return self._lib(lambda c: self.library.change(c, {path: None}, by, f"Удалён {path}", iso(now()),
+                                                       expected={path: base_sha}))
+
+    def draft_upload(self, filename: str, data: bytes, by: str, path: str | None = None) -> dict:
+        """A zip replaces the whole draft (a library folder or a published bundle); any other file is
+        added at `path` (or its own name). Either way it is one revision and can be rolled back."""
+        is_zip = (filename or "").lower().endswith(".zip")
+        genesis = self._published_genesis() if is_zip else None
+
+        def go(c):
+            if is_zip:
+                files = library.prepare(library.unzip(data), genesis)
+                return self.library.change(c, files, by, f"Загружен архив {filename}", iso(now()), replace=True)
+            return self.library.change(c, {path or filename: data}, by, f"Загружен {path or filename}", iso(now()))
+        return self._lib(go)
+
+    def draft_import_current(self, by: str) -> dict:
+        """Start the draft from the version everyone gets now."""
+        with self._tx() as c:
+            row, _ = self._pick(c, "stable", "999")
+        if row is None:
+            raise KeyServerError("no_bundle", "Методика ещё не опубликована: загрузите архив библиотеки", 404)
+        data = (self.bundles / f"{row['version']}.zip").read_bytes()
+        return self._lib(lambda c: self.library.change(
+            c, library.prepare(library.unzip(data)), by, f"Взята опубликованная версия {row['version']}", iso(now()),
+            replace=True))
+
+    def draft_route(self, steps: list[dict], stages: list[dict], by: str, version: str | None = None) -> dict:
+        """Save the route: steps and stages in order. A new stage gets SKILL.md and procedure.md from a
+        template; files of removed stages stay until deleted (a stage can also be switched off)."""
+        def go(c):
+            manifest = self._draft_manifest(c) or {"version": "0.1.0"}
+            tree = self.library.tree(c)
+            changes = {}
+            out = []
+            for st in stages:
+                sid = (st.get("id") or "").strip()
+                item = {k: st[k] for k in ("id", "title", "step", "dir", "progress", "tools", "status") if k in st}
+                item["id"] = sid
+                item["dir"] = (st.get("dir") or f"skills/{sid}").rstrip("/")
+                if st.get("status") in (None, "", "active"):
+                    item.pop("status", None)
+                if not item.get("progress"):
+                    item.pop("progress", None)
+                item["tools"] = [t for t in (st.get("tools") or []) if t]
+                skill = f"{item['dir']}/SKILL.md"
+                if methodology.ID.match(sid) and skill not in tree:
+                    title = st.get("title") or sid
+                    changes[skill] = library.STAGE_SKILL.format(id=sid, title=title).encode()
+                    changes[f"{item['dir']}/references/procedure.md"] = \
+                        library.STAGE_PROCEDURE.format(title=title).encode()
+                out.append(item)
+            manifest = manifest | {"format": methodology.FORMAT, "steps": steps, "stages": out}
+            if version:
+                manifest["version"] = version
+            changes[methodology.MANIFEST] = library.dump(manifest)
+            return self.library.change(c, changes, by, "Маршрут: этапы и шаги", iso(now()))
+        return self._lib(go)
+
+    def draft_revisions(self, limit: int = 100) -> list[dict]:
+        return self._lib(lambda c: self.library.revisions(c, limit))
+
+    def draft_diff(self, revision: int, against: int | None = None) -> list[dict]:
+        return self._lib(lambda c: self.library.diff(c, revision, against))
+
+    def draft_restore(self, revision: int, by: str) -> dict:
+        def go(c):
+            tree = self.library.tree(c, revision)
+            return self.library.commit(c, tree, by, f"Возврат к версии черновика {revision}", iso(now()))
+        return self._lib(go)
+
+    def draft_check(self) -> dict:
+        return self._lib(lambda c: self._check(self.library.files(c)))
+
+    def draft_publish(self, channel: str, by: str, note: str | None = None) -> dict:
+        """Check the draft, build the bundle from its newest revision, sign and publish it."""
+        def snapshot(c):
+            head = self.library.head(c)
+            if head is None:
+                raise library.LibraryError("empty_draft", "Черновик пуст: загрузите библиотеку", 400)
+            return head, self.library.files(c, head["id"])
+        head, files = self._lib(snapshot)
+        report = self._check(files)
+        if not report["ok"]:
+            raise KeyServerError("check_failed", "Проверка не пройдена: " + "; ".join(
+                e["detail"] for e in report["errors"][:5]), 422)
+        manifest = json.loads(files.get(methodology.MANIFEST, b"{}") or b"{}")
+        version = f"{manifest.get('version') or '0'}.r{head['id']}"
+        with self._tx() as c:
+            if c.execute("SELECT 1 FROM bundles WHERE version = ?", (version,)).fetchone():
+                raise KeyServerError("bundle_exists", f"Этот черновик уже опубликован как {version}: сделайте его "
+                                     "текущим для нужного канала", 409)
+        _, data = bundles_mod.build_files(files, version)
+        out = self.publish(data, channel=channel, revision=head["id"], note=note or f"черновик {head['id']} ({by})")
+        return out | {"check": report}
+
+    def draft_export(self, revision: int | None = None) -> bytes:
+        """The draft as a zip, to keep a copy or to move it into the methodology repository."""
+        files = self._lib(lambda c: self.library.files(c, revision))
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for path, data in sorted(files.items()):
+                z.writestr(path, data)
+        return out.getvalue()
 
     def stats(self) -> dict:
         keys = self.keys()
         by_state = {}
         for k in keys:
             by_state[k["state"]] = by_state.get(k["state"], 0) + 1
-        latest = self.bundle_list()[:1]
+        with self._tx() as c:
+            current = {r["channel"]: r["version"] for r in c.execute("SELECT * FROM current_bundle")}
+        latest = current.get("stable") or next(iter(b["version"] for b in self.bundle_list()), None)
         return {"keys": len(keys), "by_state": by_state, "devices": sum(len(k["devices"]) for k in keys),
-                "latest_bundle": latest[0]["version"] if latest else None}
+                "latest_bundle": latest, "test_bundle": current.get("test")}

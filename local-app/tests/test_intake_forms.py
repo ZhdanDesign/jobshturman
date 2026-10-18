@@ -125,6 +125,25 @@ class IntakeFormTests(unittest.TestCase):
         out = asyncio.run(go())
         self.assertEqual((out["asked_by"], out["intake"]["pain_ids"]), ("form", [3, 8]))
 
+    def test_answered_block_is_not_asked_again(self):
+        seen = []
+
+        async def scenario(s):
+            before = payload(await s.call_tool("intake_get", {}))
+            self.assertEqual(before["missing_blocks"], ["pains", "situation_goal", "situation_search", "situation_limits"])
+            await s.call_tool("intake_answer", {"block": "pains", "answer": "5, 8"})
+            await s.call_tool("intake_answer", {"block": "situation_limits", "answer": {"help_wanted": "эффективность"}})
+            after = payload(await s.call_tool("intake_get", {}))
+            self.assertEqual(after["missing_blocks"], ["situation_goal", "situation_search"])
+            out = payload(await s.call_tool("intake_ask", {"block": "pains"}))
+            self.assertEqual((out["asked_by"], out["reason"]), ("none", "already_answered"))
+            self.assertEqual(out["missing_blocks"], ["situation_goal", "situation_search"])
+            again = payload(await s.call_tool("intake_ask", {"block": "pains", "again": True}))
+            self.assertEqual(again["asked_by"], "form")
+        card = self.card_after(scenario, form_filler({"pains": {"pain_1": True}}, seen))
+        self.assertEqual(len(seen), 1)  # only the explicit «again» showed a form
+        self.assertEqual(card["pain_ids"], [1])
+
     def test_skip_in_the_form(self):
         async def scenario(s):
             payload(await s.call_tool("intake_ask", {"block": "pains"}))

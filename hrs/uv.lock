@@ -497,7 +497,7 @@ wheels = [
 
 [[package]]
 name = "hrs-collector"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "../collector" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -533,6 +533,7 @@ source = { editable = "../key-server" }
 dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "hrshturman-core" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
@@ -541,6 +542,7 @@ dependencies = [
 requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "hrshturman-core", editable = "../core" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
@@ -554,7 +556,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -587,12 +589,12 @@ dev = [{ name = "hrs-keys", editable = "../key-server" }]
 
 [[package]]
 name = "hrshturman-core"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "../core" }
 
 [[package]]
 name = "hrshturman-local"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "../local-app" }
 dependencies = [
     { name = "fpdf2" },

@@ -6,7 +6,9 @@ from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_local import mcp_server as local_mcp
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import docs, license, paths, web
+from hrshturman_core import schedule as schedule_core
+
+from . import docs, license, paths, schedule, web
 from .inproc import InProcessCollectorClient
 
 INSTRUCTIONS = (
@@ -14,13 +16,17 @@ INSTRUCTIONS = (
     "его source_id в source_refs фактов.\n- Источники вакансий: list_sources, add_search_source, "
     "add_telegram_channel; сбор и перенос в карточки: vacancies_sync(run=true).\n- В начале работы вызови "
     "license_status. Если в ответе есть warning, перескажи его человеку со ссылкой на продление. Если "
-    "methodology=false, процедуры этапов недоступны: объясни причину из message и не выдумывай методику."
+    "methodology=false, процедуры этапов недоступны: объясни причину из message и не выдумывай методику. "
+    "Если есть hrs_update, перескажи его человеку и предложи обновить программу командой из него."
     "\n- Где человек отвечает: ui_mode. Если режим не выбран, после ключа один раз спроси: отвечать в чате или в окне "
     "браузера (встроенном у агента или обычном) — и сохрани ui_mode(mode=...). Сменить можно в любой момент словами "
     "«открой в браузере» или «давай в чате».\n- chat: если ты умеешь показывать MCP Apps, вызови ui_show — анкета "
     "появится в чате; иначе задавай вопросы как обычно. builtin_browser: ui_open, затем открой url своим встроенным "
     "браузером (Browser pane Claude Code, браузер приложения Codex). external_browser: ui_open(external=true). "
     "Ответы со страницы сразу лежат в базе: читай их через intake_get, не переспрашивай."
+    "\n- Регулярные задачи hrs (без агента): schedule_status, schedule_set, schedule_install. Сводка — digest_get, "
+    "напоминания — reminders_list. Свои задачи по расписанию регистрируй через schedule_register."
+    "\n- Справка о продукте — product_help: отвечай по ней, когда человек спрашивает, как работать с JobShturman."
 )
 APP_URI = "ui://hrshturman/app.html"
 APP_MIME = "text/html;profile=mcp-app"
@@ -47,8 +53,8 @@ def build(settings=None, collector: Collector | None = None):
     settings = settings or paths.settings()
     collector = collector or Collector(paths.collector_dir())
     client = InProcessCollectorClient(collector, settings.candidate_id)
-    mcp = local_mcp.build_server(settings, collector=client, extra_instructions=INSTRUCTIONS,
-                                 library=Methodology(settings))
+    library = Methodology(settings)
+    mcp = local_mcp.build_server(settings, collector=client, extra_instructions=INSTRUCTIONS, library=library)
     collector_mcp.register_tools(mcp, collector, default_candidate=settings.candidate_id)
 
     @mcp.tool()
@@ -71,7 +77,7 @@ def build(settings=None, collector: Collector | None = None):
 
     store = Store(settings.db_path).init()
     cid = settings.candidate_id
-    screen = web.WebUI(store, cid)
+    screen = web.WebUI(store, cid, library)
 
     def domain(fn):
         try:
@@ -100,29 +106,99 @@ def build(settings=None, collector: Collector | None = None):
     def ui_show(view: str = "intake") -> dict:
         """Показать анкету этапа 0 и маршрут прямо в чате (MCP App). Клиент без MCP Apps получит только данные:
         тогда задай вопросы текстом или предложи ui_open."""
-        return domain(lambda: web.state(store, cid) | {"view": view})
+        return domain(lambda: web.state(store, cid, web.route_of(library)) | {"view": view})
 
     app_only = {"ui": {"visibility": ["app"]}}
 
     @mcp.tool(meta=app_only)
     def ui_state() -> dict:
         """Для страницы JobShturman: анкета, вопросы блоков и маршрут."""
-        return domain(lambda: web.state(store, cid))
+        return domain(lambda: web.state(store, cid, web.route_of(library)))
 
     @mcp.tool(meta=app_only)
     def ui_answer(block: str, answer: str | list[str | int] | dict[str, str]) -> dict:
         """Для страницы JobShturman: ответ кандидата на блок анкеты."""
-        return domain(lambda: web.answer(store, cid, block, answer))
+        return domain(lambda: web.answer(store, cid, block, answer, route=web.route_of(library)))
 
     @mcp.tool(meta=app_only)
     def ui_confirm(expected_version: int) -> dict:
         """Для страницы JobShturman: кандидат нажал «Всё верно, подтверждаю»."""
-        return domain(lambda: web.confirm(store, cid, expected_version))
+        return domain(lambda: web.confirm(store, cid, expected_version, route=web.route_of(library)))
 
     @mcp.resource(APP_URI, name="hrshturman-app", title=PRODUCT_NAME, mime_type=APP_MIME,
                   meta={"ui": {"prefersBorder": True}})
     def app_page() -> str:
         return web.page()
+
+    def license_info():
+        try:
+            return license.refresh(force=False)
+        except Exception:  # noqa: BLE001 - the key server being away never hides a reminder
+            return {}
+
+    @mcp.tool()
+    def schedule_status() -> dict:
+        """Регулярные задачи hrs (license, collect, digest, reminders): время, включены ли, стоят ли в системном
+        планировщике, последние запуски; задачи агентов; где лежат сводка digest.md и журналы."""
+        return domain(schedule.status)
+
+    @mcp.tool()
+    def schedule_set(task: str, times: list[str] | None = None, enabled: bool | None = None) -> dict:
+        """Изменить время задачи hrs (times: ["HH:MM", ...], время компьютера) или включить/выключить её.
+        Только по слову человека. Если задачи уже стоят в планировщике, затем вызови schedule_install."""
+        def go():
+            schedule_core.set_task(store, cid, task, times, enabled)
+            return schedule.status()
+        return domain(go)
+
+    @mcp.tool()
+    def schedule_install() -> dict:
+        """Поставить включённые задачи hrs в системный планировщик (macOS launchd, Windows Task Scheduler,
+        Linux systemd). Только после согласия человека: скажи, что и когда будет запускаться."""
+        return domain(schedule.install)
+
+    @mcp.tool()
+    def schedule_remove() -> dict:
+        """Убрать все задачи hrs из системного планировщика. Данные и настройки остаются."""
+        return domain(schedule.remove)
+
+    @mcp.tool()
+    def schedule_register(agent: str, name: str, cadence: str, purpose: str) -> dict:
+        """Сообщить hrs о задаче по расписанию, которую ты создал своими средствами (agent: claude_code | codex |
+        other). Так человек видит её в schedule_status и может попросить остановить."""
+        return domain(lambda: schedule_core.register_agent_task(store, cid, agent, name, cadence, purpose))
+
+    @mcp.tool()
+    def schedule_unregister(agent: str, name: str) -> dict:
+        """Убрать задачу агента из списка после того, как ты удалил её у себя."""
+        return domain(lambda: schedule_core.unregister_agent_task(store, cid, agent, name))
+
+    @mcp.tool()
+    def reminders_list() -> list[dict]:
+        """Что ждёт человека сейчас: напоминания по правилам (анкета, резюме, решения по вакансиям, разрешения,
+        нет ответа 7 дней, встреча, ключ). Закрытые и отложенные не показываются."""
+        return domain(lambda: [{k: r[k] for k in ("id", "rule", "text", "ref")}
+                               for r in schedule_core.reminders(store, cid, license_info=license_info())])
+
+    @mcp.tool()
+    def reminder_done(reminder_id: str) -> dict:
+        """Закрыть напоминание: оно вернётся, только если состояние изменится."""
+        return domain(lambda: schedule_core.reminder_done(store, cid, reminder_id, license_info=license_info()))
+
+    @mcp.tool()
+    def reminder_snooze(reminder_id: str, hours: float) -> dict:
+        """Отложить напоминание на hours часов."""
+        return domain(lambda: schedule_core.reminder_snooze(store, cid, reminder_id, hours,
+                                                            license_info=license_info()))
+
+    @mcp.tool()
+    def digest_get(since: str | None = None) -> dict:
+        """Сводка: новые вакансии с прошлой сводки (или since, ISO-время), лучшие по рангу, что ждёт решения,
+        воронка и напоминания. markdown — готовый текст для человека."""
+        def go():
+            last = (schedule_core.get_settings(store, cid)["last_runs"].get("digest") or {}).get("at")
+            return schedule_core.digest(store, cid, since=since or last, license_info=license_info())
+        return domain(go)
 
     @mcp.tool()
     def license_status(refresh: bool = False) -> dict:

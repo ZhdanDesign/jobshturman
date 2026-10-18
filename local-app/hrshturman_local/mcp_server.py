@@ -15,28 +15,37 @@ from pydantic import BaseModel, Field, create_model
 
 from hrshturman_core import DomainError, Store
 from hrshturman_core import applications as apps
-from hrshturman_core import checks, intake, report, resume
+from hrshturman_core import checks, intake, methodology, report, resume
 from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.workspace import create_candidate
 
-from . import collector_feed, config, render
+from . import collector_feed, config, help_text, render
 
-INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике из 25 этапов.
+INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике.
 Приложение хранит факты, резюме, карточки откликов и воронку; ты интервьюируешь, пишешь черновики и оцениваешь вакансии.
 Правила:
 - Начни с status_report: он показывает этап, следующий шаг и блокеры.
+- Без пауз: после ответа человека сразу делай следующий шаг. Останавливайся только когда этап закончен,
+  нужен ответ или подтверждение человека или работа на сегодня завершена, и каждый раз говори, что дальше.
 - Не выдумывай факты и цифры. Каждое утверждение резюме ссылается на fact_id.
 - Подтверждение анкеты, фактов, резюме, решение по вакансии, разрешение и отметку об отправке делай только после явных слов кандидата в этом разговоре.
 - Отправку кандидат делает сам. Отмечай её только с доказательством (ссылка, скриншот, номер отклика).
 - Ошибка с кодом state_version_conflict значит, что объект изменился: перечитай его и повтори с новой версией.
-- Анкету этапа 00 задавай блоками через intake_ask: pains, situation_goal, situation_search, situation_limits.
+- Анкету диагностики (первый этап) задавай блоками через intake_ask: pains, situation_goal, situation_search, situation_limits.
+  Спрашивай только блоки из missing_blocks в intake_get; asked_by="none" значит, что блок уже отвечен.
   Если формы не было (asked_by="agent"), задай вопросы сам и передай ответ как есть в intake_answer.
   Потом покажи карту запроса и подтверждай intake_confirm только после явного «да».
-- Процедуру текущего этапа читай инструментом stage_procedure(stage_id): по одному этапу, весь пакет методики не выдаётся.
-  Её же отдаёт ресурс hrshturman://procedure/{stage_id}.
-- Проверки делай инструментами, а не вручную: план действий этапа 06 — plan_check; письмо, кейс портфолио,
-  сопроводительный текст и ответ работодателю (этапы 09, 10, 17, 19) — text_check; жёсткие ограничения
-  вакансии (зарплата, формат, география) на этапе 15 — vacancy_constraints. Их ответ не пересчитывай."""
+- Вакансии: уровень сбора aggressive | moderate (по умолчанию) | specialized; зарплату в запрос к HH не ставь.
+  После сбора — vacancies_screen, затем каждую вакансию оцени 1–5 через application_score.
+  Подборку показывай только из vacancies_ranked, с рангом у каждой строки; свои скрипты для оценки не пиши.
+- Главные правила работы — инструмент agent_rules: прочитай их в начале сессии и следуй им; при расхождении
+  с этим текстом правила agent_rules важнее.
+- Список этапов и шагов — methodology_route. Процедуру текущего этапа читай инструментом stage_procedure
+  (номер или id этапа): по одному этапу, весь пакет методики не выдаётся. Её же отдаёт ресурс
+  hrshturman://procedure/{stage_id}.
+- Проверки делай инструментами, а не вручную: план действий — plan_check; письмо, кейс портфолио,
+  сопроводительный текст и ответ работодателю — text_check; жёсткие ограничения вакансии (зарплата, формат,
+  география) — vacancy_constraints. Какие нужны этапу, видно в methodology_route. Их ответ не пересчитывай."""
 
 
 def tool_errors(fn):
@@ -125,14 +134,8 @@ class FileLibrary:
 
 
 def stage_text(library, stage_id) -> str:
-    """The procedure of one stage 0–25: its references/procedure.md, else its SKILL.md. Nothing of other stages."""
-    prefix = f"skills/stage-{int(stage_id):02d}-"
-    names = set(library.names())
-    stages = sorted({n.split("/")[1] for n in names if n.startswith(prefix)})
-    if not stages:
-        raise DomainError("not_found", f"stage {int(stage_id)}")
-    procedure_md = f"skills/{stages[0]}/references/procedure.md"
-    return library.read(procedure_md if procedure_md in names else f"skills/{stages[0]}/SKILL.md")
+    """The procedure of one stage by number or id; the manifest of the library decides the route."""
+    return methodology.stage_text(library, stage_id)
 
 
 def build_server(settings, collector=None, extra_instructions="", library=None):
@@ -163,8 +166,10 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
 
     @tool
     def intake_get() -> dict:
-        """Анкета-диагностика: список 8 трудностей и текущая карта запроса (или null, если анкеты ещё нет)."""
-        return {"pains": intake.PAINS, "intake": intake.get_intake(store, cid)}
+        """Анкета-диагностика: список 8 трудностей, текущая карта запроса (или null, если анкеты ещё нет)
+        и missing_blocks — блоки без ответа по порядку. Спрашивай только их."""
+        card = intake.get_intake(store, cid)
+        return {"pains": intake.PAINS, "intake": card, "missing_blocks": intake.missing_blocks(card)}
 
     @tool
     def intake_save_draft(pain_ids: list[int], custom_pain: str | None = None, skipped: bool = False,
@@ -176,14 +181,26 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
                                 actor="candidate_via_agent")
         return dict(obj, request_map=intake.request_map(obj))
 
+    def ask_unanswered(block: str, ctx: Context, again: bool = False):
+        """The form only for a block still without an answer, unless the person wants to change it."""
+        if not again and block in intake.BLOCKS and block not in intake.missing_blocks(intake.get_intake(store, cid)):
+            return None
+        return _ask_form(block, ctx)
+
     @tool
     async def intake_ask(block: str,
-                         form: Annotated[ElicitationResult[BaseModel], Resolve(_ask_form)]) -> dict:
-        """Задать блок анкеты этапа 00: pains (8 трудностей), situation_goal, situation_search, situation_limits.
+                         form: Annotated[ElicitationResult[BaseModel], Resolve(ask_unanswered)],
+                         again: bool = False) -> dict:
+        """Задать блок анкеты диагностики (первый этап): pains (8 трудностей), situation_goal, situation_search, situation_limits.
         Сервер сам показывает форму, если клиент умеет MCP-формы. Ответ формы сразу сохраняется в черновик.
         Если вернулось asked_by="agent" — формы не было или человек её закрыл: задай эти вопросы сам
-        (встроенным выбором вариантов или нумерованным списком) и передай ответ в intake_answer."""
+        (встроенным выбором вариантов или нумерованным списком) и передай ответ в intake_answer.
+        asked_by="none" — на блок уже ответили: не спрашивай, переходи к missing_blocks.
+        again=true — только если человек сам хочет изменить ответ."""
         questions = intake.questions(block)
+        missing = intake.missing_blocks(intake.get_intake(store, cid))
+        if not again and block not in missing:
+            return {"asked_by": "none", "reason": "already_answered", "block": block, "missing_blocks": missing}
         if form.action == "accept" and form.data is None:  # the resolver did not ask
             return {"asked_by": "agent", "reason": "client_has_no_forms", **questions}
         if form.action != "accept":
@@ -268,13 +285,45 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
     def vacancy_constraints(application_id: str, policy: dict) -> dict:
         """Этап 15, шаг 4: зарплата, формат и география вакансии против политики кандидата.
         policy: salary_min (в месяц), currency (по умолчанию RUB), gross (true/false), formats [REMOTE, HYBRID,
-        ON_SITE], locations [города или страны], relocation (true/false) — только то, что кандидат утвердил.
-        Ответ: salary ok|below|unknown, format и location ok|conflict|unknown, hard_conflicts, notes.
+        ON_SITE], locations [города или страны], relocation (true/false), salary_tolerance (доля ниже запроса,
+        которую ещё стоит смотреть, по умолчанию 0.3) — только то, что кандидат утвердил.
+        Ответ: salary ok|near|below|unknown, format и location ok|conflict|unknown, hard_conflicts, notes.
+        below — только явно указанная зарплата заметно ниже запроса; вилка «от …» без верха — near.
         Неизвестная зарплата остаётся unknown и не считается ни нулём, ни совпадением."""
         app = next((a for a in apps.list_applications(store, cid) if a["object_id"] == application_id), None)
         if app is None:
             raise DomainError("not_found", f"application {application_id}")
         return checks.vacancy_constraints(app["vacancy"], policy)
+
+    @tool
+    def vacancies_screen(policy: dict, level: str = "moderate") -> dict:
+        """Этап 15 до оценки: какие найденные вакансии идут на оценку 1–5 при выбранном уровне сбора.
+        level: aggressive (без отсева) | moderate (по умолчанию, отсев только явных конфликтов) |
+        specialized (строже к зарплате). policy — как в vacancy_constraints. Вакансии без зарплаты, с открытой
+        вилкой («от …») и с зарплатой чуть ниже запроса остаются. Состояние карточек не меняется."""
+        items = [{"id": a["object_id"], "vacancy": a["vacancy"]} for a in apps.list_applications(store, cid)
+                 if a["state"] in ("found", "needs_full_text")]
+        return checks.screen(items, policy, level)
+
+    @tool
+    def vacancies_ranked() -> dict:
+        """Подборка для человека: вакансии с оценкой 1–5 от лучшей к худшей и список ещё не оценённых.
+        Показывай подборку только отсюда; всё из unscored сначала оцени через application_score."""
+        ranked, unscored = [], []
+        for a in apps.list_applications(store, cid):
+            if a["state"] == "rejected_policy":
+                continue
+            row = {"application_id": a["object_id"], "title": a["vacancy"].get("title"),
+                   "company": a["vacancy"].get("company"), "url": a["vacancy"].get("url"),
+                   "salary": a["vacancy"].get("salary"), "state": a["state"]}
+            score = a["score"]
+            if score:
+                ranked.append(row | {"rank": score["final"] or score["preliminary"],
+                                     "final": score["final"] is not None, "why": score["why"]})
+            else:
+                unscored.append(row)
+        ranked.sort(key=lambda r: (-r["rank"], not r["final"]))
+        return {"ranked": ranked, "unscored": unscored}
 
     @tool
     def vacancies_import(items: list[dict], track_id: str = "main") -> dict:
@@ -350,15 +399,40 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
     # --- methodology: only the current stage, not the whole catalog ---
 
     @tool
-    def stage_procedure(stage_id: int) -> str:
-        """Процедура одного этапа 0–25 методики. Читай только этап, на котором кандидат (см. status_report)."""
+    def stage_procedure(stage_id: int | str) -> str:
+        """Процедура одного этапа методики: номер этапа (с 0) или его id из methodology_route.
+        Читай только этап, на котором кандидат (см. status_report)."""
         return stage_text(library, stage_id)
+
+    @tool
+    def methodology_route() -> dict:
+        """Маршрут методики: большие шаги и этапы по порядку (номер, id, название, шаг, нужные инструменты).
+        Тексты этапов здесь не выдаются: их даёт stage_procedure."""
+        return methodology.route(library).public()
+
+    @tool
+    def agent_rules() -> str:
+        """Главные правила работы агента от автора методики. Прочитай в начале сессии и следуй им."""
+        return methodology.genesis_text(library)
 
     @mcp.resource("hrshturman://procedure/{stage_id}")
     @resource_errors
     def procedure(stage_id: str) -> str:
-        """Процедура этапа 0–25 из библиотеки навыков."""
+        """Процедура этапа методики по номеру или id."""
         return stage_text(library, stage_id)
+
+    @tool
+    def product_help(topic: str | None = None) -> dict:
+        """Справка JobShturman для человека: как устроена работа, вакансии и ранг, отклики, расписание и
+        напоминания, где хранятся данные, ключ, пауза, что делать, если что-то не работает.
+        Без topic — оглавление и вступление; с topic — подходящие разделы. Отвечай человеку по ней своими словами."""
+        return help_text.lookup(topic)
+
+    @mcp.resource("hrshturman://agent-rules")
+    @resource_errors
+    def agent_rules_resource() -> str:
+        """Главные правила работы агента (agent_rules)."""
+        return methodology.genesis_text(library)
 
     @mcp.resource("hrshturman://runtime-constraints")
     @resource_errors
