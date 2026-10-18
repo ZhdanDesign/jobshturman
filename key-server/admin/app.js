@@ -364,46 +364,60 @@ function checkPanel(check) {
     ${check.ok && !check.findings.length ? '<p class="muted">Ошибок и замечаний нет.</p>' : ""}</section>`;
 }
 
-function routePanel() {
+const fileSize = (file) => `${(file.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ`;
+const fileItem = (file, dir = "") => `<li><a class="mono small" href="#edit/${encodeURIComponent(file.path)}">${escapeHTML(dir && file.path.startsWith(`${dir}/`) ? file.path.slice(dir.length + 1) : file.path)}</a> <span class="muted small">${fileSize(file)}</span></li>`;
+
+function stageFiles(stage) {
+  const paths = data.draft.stages.find((saved) => saved.id === stage.id)?.files || [];
+  return data.draft.files.filter((file) => paths.includes(file.path));
+}
+
+function routePanel(open = new Set()) {
   const route = data.route;
   const option = (value, title, selected) => `<option value="${escapeHTML(value)}" ${value === selected ? "selected" : ""}>${escapeHTML(title)}</option>`;
+  const stepTitle = (id) => route.steps.find((step) => step.id === id)?.title || id || "Без шага";
   const rows = route.stages.map((stage, i) => {
     const number = stageNumber(route.stages, i);
-    const files = data.draft.stages.find((saved) => saved.id === stage.id)?.files.length || 0;
-    return `<tr class="${stage.status === "off" ? "off" : ""}" data-stage="${i}">
-      <td class="mono">${number === null ? "—" : number}</td>
-      <td><input data-field="title" value="${escapeHTML(stage.title || "")}" aria-label="Название этапа ${escapeHTML(stage.id)}" maxlength="120"></td>
-      <td>${files ? `<a class="mono small" href="#edit/${encodeURIComponent(`${stage.dir}/SKILL.md`)}">${escapeHTML(stage.id)}</a><br><small class="muted">Файлов: ${files}</small>` : `<span class="mono small">${escapeHTML(stage.id)}</span><br><small class="muted">Новый этап</small>`}</td>
-      <td><select data-field="step" aria-label="Шаг этапа ${escapeHTML(stage.id)}">${route.steps.map((step) => option(step.id, step.title, stage.step)).join("")}${route.steps.some((step) => step.id === stage.step) ? "" : option(stage.step || "", `Нет шага «${stage.step || ""}»`, stage.step || "")}</select></td>
-      <td><select data-field="progress" aria-label="Чем отмечается прогресс этапа ${escapeHTML(stage.id)}">${option("", "—", stage.progress || "")}${Object.entries(progressNames).map(([id, title]) => option(id, title, stage.progress || "")).join("")}</select></td>
-      <td><label class="check"><input type="checkbox" data-field="on" ${stage.status === "off" ? "" : "checked"}> Включён</label></td>
-      <td><div class="actions"><button class="button ghost" data-action="stage-up" aria-label="Выше" ${i ? "" : "disabled"}>↑</button><button class="button ghost" data-action="stage-down" aria-label="Ниже" ${i < route.stages.length - 1 ? "" : "disabled"}>↓</button><button class="button ghost" data-action="stage-remove" aria-label="Убрать этап ${escapeHTML(stage.id)} из маршрута">${icon("close")}</button></div></td></tr>`;
+    const files = stageFiles(stage);
+    const off = stage.status === "off";
+    return `<li class="stage${off ? " off" : ""}" data-stage="${i}" data-id="${escapeHTML(stage.id)}"><details ${open.has(stage.id) ? "open" : ""}>
+      <summary><span class="stage-number mono">${number === null ? "—" : number}</span><span class="stage-title">${escapeHTML(stage.title || stage.id)}</span>
+        <span class="stage-meta"><span class="badge">${escapeHTML(stepTitle(stage.step))}</span>${off ? '<span class="badge revoked">Выключен</span>' : ""}<span class="muted small">${files.length ? `Файлов: ${files.length}` : "Новый этап"}</span></span></summary>
+      <div class="stage-body">
+        <div class="stage-fields">
+          <div class="field"><label for="stage-title-${i}">Название</label><input id="stage-title-${i}" data-field="title" value="${escapeHTML(stage.title || "")}" maxlength="120"></div>
+          <div class="field"><label for="stage-step-${i}">Шаг</label><select id="stage-step-${i}" data-field="step">${route.steps.map((step) => option(step.id, step.title, stage.step)).join("")}${route.steps.some((step) => step.id === stage.step) ? "" : option(stage.step || "", `Нет шага «${stage.step || ""}»`, stage.step || "")}</select></div>
+          <div class="field"><label for="stage-progress-${i}">Чем отмечается прогресс</label><select id="stage-progress-${i}" data-field="progress">${option("", "—", stage.progress || "")}${Object.entries(progressNames).map(([id, title]) => option(id, title, stage.progress || "")).join("")}</select></div>
+          <label class="check"><input type="checkbox" data-field="on" ${off ? "" : "checked"}> Этап включён</label>
+        </div>
+        <div class="stage-files"><h3>Файлы этапа <span class="muted small mono">${escapeHTML(stage.dir || "")}</span></h3>
+          ${files.length ? `<ul>${files.map((file) => fileItem(file, stage.dir)).join("")}</ul>` : '<p class="muted small">Файлы появятся после сохранения маршрута.</p>'}
+          <button class="button" data-action="file-new" data-dir="${escapeHTML(stage.dir || "")}">${icon("plus")}Файл в этап</button></div>
+        <div class="actions stage-actions"><button class="button" data-action="stage-up" ${i ? "" : "disabled"}>↑ Выше</button><button class="button" data-action="stage-down" ${i < route.stages.length - 1 ? "" : "disabled"}>↓ Ниже</button><button class="button danger" data-action="stage-remove">Убрать из маршрута</button></div>
+      </div></details></li>`;
   }).join("");
   const steps = route.steps.map((step, i) => `<li data-step="${i}"><input data-field="step-title" value="${escapeHTML(step.title || "")}" aria-label="Название шага ${escapeHTML(step.id)}" maxlength="80"><code>${escapeHTML(step.id)}</code>
     <span class="muted small">Этапов: ${route.stages.filter((stage) => stage.step === step.id).length}</span>
     <button class="button ghost" data-action="step-remove" aria-label="Убрать шаг ${escapeHTML(step.id)}" ${route.stages.some((stage) => stage.step === step.id) ? "disabled" : ""}>${icon("close")}</button></li>`).join("");
   return `<div class="panel-heading"><h2>Маршрут <span class="muted">включено этапов: ${route.stages.filter((stage) => stage.status !== "off").length}</span></h2>
       <div class="actions"><button class="button" data-action="step-add">${icon("plus")}Шаг</button><button class="button" data-action="stage-add">${icon("plus")}Этап</button></div></div>
-    <p class="small muted">Агент идёт по включённым этапам сверху вниз; номер этапа — его место в маршруте. Шаги — крупные группы, их видит пользователь. Выключенный или убранный этап остаётся в файлах черновика.</p>
-    <ol class="steps">${steps}</ol>
-    <div class="table-wrap" role="region" aria-label="Этапы методики, прокручивается по горизонтали" tabindex="0">
-      <table class="route"><thead><tr><th scope="col">№</th><th scope="col">Название</th><th scope="col">Папка</th><th scope="col">Шаг</th><th scope="col">Прогресс</th><th scope="col">Статус</th><th scope="col">Порядок</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="small muted">Агент идёт по включённым этапам сверху вниз; номер этапа — его место в маршруте. Откройте этап, чтобы изменить его или открыть его файлы. Выключенный или убранный этап остаётся в файлах черновика.</p>
+    <details class="steps-box"><summary>Шаги — крупные группы этапов, их видит пользователь: ${route.steps.map((step) => escapeHTML(step.title || step.id)).join(" · ")}</summary><ol class="steps">${steps}</ol></details>
+    <ol class="stages">${rows}</ol>
     <div class="form-row route-save"><div class="field"><label for="route-version">Версия методики</label><input id="route-version" data-field="version" value="${escapeHTML(route.version)}" maxlength="40" placeholder="0.5.0"></div>
       <div class="dialog-actions"><span class="small muted" role="status">${route.dirty ? "Есть несохранённые изменения" : ""}</span><button class="button" data-action="route-reset" ${route.dirty ? "" : "disabled"}>Отменить</button><button class="button primary" data-action="route-save" ${route.dirty ? "" : "disabled"}>Сохранить маршрут</button></div></div>`;
 }
 
 function updateRoute() {
-  document.getElementById("route-panel").innerHTML = routePanel();
+  const panel = document.getElementById("route-panel");
+  const open = new Set([...(panel.querySelectorAll?.("li.stage") || [])].filter((item) => item.querySelector("details")?.open).map((item) => item.dataset.id));
+  panel.innerHTML = routePanel(open);
 }
 
-function fileGroups(draft) {
-  const groups = [];
-  const taken = new Set();
-  const add = (title, files) => { if (files.length) { groups.push([title, files]); files.forEach((file) => taken.add(file.path)); } };
-  add("Главный промпт и маршрут", draft.files.filter((file) => file.path === GENESIS || file.path === MANIFEST || file.path.startsWith("agent/")));
-  draft.stages.forEach((stage, i) => add(`${stageNumber(draft.stages, i) ?? "—"} · ${stage.title || stage.id}`, draft.files.filter((file) => stage.files.includes(file.path) && !taken.has(file.path))));
-  add("Остальные файлы", draft.files.filter((file) => !taken.has(file.path)));
-  return groups;
+function commonFiles(draft) {
+  const staged = new Set(draft.stages.flatMap((stage) => stage.files));
+  const main = draft.files.filter((file) => file.path === GENESIS || file.path === MANIFEST || file.path.startsWith("agent/"));
+  return [["Главный промпт и маршрут", main], ["Не относятся к этапам", draft.files.filter((file) => !staged.has(file.path) && !main.includes(file))]].filter(([, files]) => files.length);
 }
 
 function renderMethodology(draft, revisions) {
@@ -417,8 +431,9 @@ function renderMethodology(draft, revisions) {
     ${head ? "" : `<div class="info-note">${icon("info")}<p>Начните с загрузки библиотеки (zip) ниже или возьмите опубликованную версию. Старая библиотека с папками stage-00…25 подходит: маршрут и главный промпт добавятся сами.</p></div>`}
     ${checkPanel(draft.check)}
     ${head ? `<section class="panel" id="route-panel">${routePanel()}</section>` : ""}
-    ${head ? `<section class="panel"><div class="panel-heading"><h2>Файлы <span class="muted">${draft.files.length}</span></h2><div class="actions"><button class="button" data-action="file-new">${icon("plus")}Новый файл</button></div></div>
-      ${fileGroups(draft).map(([title, files]) => `<details class="files"><summary>${escapeHTML(title)} <span class="muted small">${files.length}</span></summary><ul>${files.map((file) => `<li><a class="mono small" href="#edit/${encodeURIComponent(file.path)}">${escapeHTML(file.path)}</a> <span class="muted small">${(file.size / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КБ</span></li>`).join("")}</ul></details>`).join("")}</section>` : ""}
+    ${head ? `<section class="panel"><div class="panel-heading"><h2>Общие файлы</h2><div class="actions"><button class="button" data-action="file-new">${icon("plus")}Новый файл</button></div></div>
+      <p class="small muted">Файлы этапов открываются из маршрута выше.</p>
+      ${commonFiles(draft).map(([title, files]) => `<details class="files" open><summary>${escapeHTML(title)} <span class="muted small">${files.length}</span></summary><ul>${files.map((file) => fileItem(file)).join("")}</ul></details>`).join("")}</section>` : ""}
     <section class="panel upload"><h2>Загрузить</h2>
       <form id="draft-upload-form"><div class="field"><label for="draft-file">Файл или архив zip</label><input id="draft-file" name="file" type="file" required><small>Архив zip целиком заменяет черновик: прежний останется в истории. Отдельный файл добавляется или заменяет файл с тем же путём.</small></div>
         <div class="field"><label for="draft-path">Путь для отдельного файла</label><input id="draft-path" name="path" placeholder="skills/salary-talk/references/примеры.md" maxlength="300" spellcheck="false"><small>Пусто — файл ляжет в корень под своим именем.</small></div>
@@ -505,9 +520,9 @@ function showStepAdd() {
     ${formActions("Добавить")}</form>`);
 }
 
-function showFileNew() {
-  openDialog("Новый файл", "Путь внутри методики, например папка этапа и имя файла.", `<form id="file-new-form">
-    <div class="field"><label for="new-path">Путь</label><input id="new-path" name="path" maxlength="300" required placeholder="skills/salary-talk/references/примеры.md" spellcheck="false" autofocus></div>
+function showFileNew(dir = "") {
+  openDialog("Новый файл", dir ? "Файл появится в папке этапа. Допишите имя файла." : "Путь внутри методики, например папка этапа и имя файла.", `<form id="file-new-form">
+    <div class="field"><label for="new-path">Путь</label><input id="new-path" name="path" maxlength="300" required value="${dir ? escapeHTML(`${dir}/references/`) : ""}" placeholder="skills/salary-talk/references/примеры.md" spellcheck="false" autofocus></div>
     ${formActions("Открыть редактор")}</form>`);
 }
 
@@ -842,6 +857,7 @@ root.addEventListener("input", (event) => {
   if (event.target.id === "search") { filters.query = event.target.value; updateList(); }
   else if (event.target.dataset?.field && data.route) {
     editRoute(event.target);
+    if (event.target.dataset.field === "title") { const title = event.target.closest(".stage")?.querySelector(".stage-title"); if (title) title.textContent = event.target.value; }
     // Кнопки включаются сразу, без перерисовки: иначе потерялся бы фокус в поле.
     ["route-save", "route-reset"].forEach((action) => { const button = document.querySelector?.(`[data-action="${action}"]`); if (button) button.disabled = false; });
   }
@@ -866,7 +882,7 @@ root.addEventListener("click", async (event) => {
   else if (action === "publish") showPublish(button.dataset.channel);
   else if (action === "stage-add") showStageAdd();
   else if (action === "step-add") showStepAdd();
-  else if (action === "file-new") showFileNew();
+  else if (action === "file-new") showFileNew(button.dataset.dir);
   else if (action === "restore-rev") showRestore(Number(button.dataset.rev));
   else if (action === "file-delete" && data.file) showFileDelete(data.file);
   else if (action === "stage-up" || action === "stage-down") moveStage(Number(button.closest("[data-stage]").dataset.stage), action === "stage-up" ? -1 : 1);

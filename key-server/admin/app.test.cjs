@@ -272,6 +272,19 @@ test("маршрут: перенос, новый этап и шаг, выклю�
   assert.ok(body.stages.every((stage) => !("files" in stage) && !("position" in stage)));
 });
 
+test("файлы этапа открываются из его строки маршрута, отдельного списка этапов внизу нет", async () => {
+  const app = load({ token: "author", routes: methodologyApi });
+  app.context.window.location.hash = "#methodology";
+  await app.run("render()");
+  const main = app.element("main").innerHTML;
+  assert.match(main.slice(0, main.indexOf("Общие файлы")), /Анкета[\s\S]*Файлов: 1[\s\S]*href="#edit\/skills%2Fintake%2FSKILL\.md">SKILL\.md<\/a>[\s\S]*data-dir="skills\/intake"/);
+  const common = main.slice(main.indexOf("Общие файлы"));
+  assert.match(common, /agent\/genesis\.md[\s\S]*README\.md/);
+  assert.doesNotMatch(common, /skills\/intake/);
+  app.run('showFileNew("skills/intake")');
+  assert.match(app.element("dialog").innerHTML, /value="skills\/intake\/references\/"/);
+});
+
 test("файл сохраняется с версией, которую открыли; чужая правка не перезаписывается", async () => {
   let conflict = false;
   const app = load({ token: "author", routes: { ...methodologyApi,
