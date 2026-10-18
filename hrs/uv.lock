@@ -497,7 +497,7 @@ wheels = [
 
 [[package]]
 name = "hrs-collector"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../collector" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -554,7 +554,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -587,12 +587,12 @@ dev = [{ name = "hrs-keys", editable = "../key-server" }]
 
 [[package]]
 name = "hrshturman-core"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../core" }
 
 [[package]]
 name = "hrshturman-local"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../local-app" }
 dependencies = [
     { name = "fpdf2" },

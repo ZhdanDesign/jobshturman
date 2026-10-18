@@ -1,6 +1,6 @@
 [project]
 name = "hrs-collector"
-version = "0.1.0"
+version = "0.2.0"
 description = "JobShturman vacancy collector: HeadHunter, Telegram and LinkedIn adapters behind one core, with HTTP API and MCP server"
 requires-python = ">=3.12"
 dependencies = [
