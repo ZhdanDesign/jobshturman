@@ -135,7 +135,7 @@ main:focus { outline: none; }
 .wordmark-mark::after { content: ""; position: absolute; inset: 6px 5px 6px 9px; border-radius: 2px 6px 6px 2px; background: #fff; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .site-header nav { display: flex; gap: 22px; margin-inline-start: auto; font-size: .9375rem; }
 .site-header nav a { text-decoration: none; color: var(--muted); }
-.site-header nav a:hover { color: var(--ink); }
+.site-header nav a:hover, .site-header nav a[aria-current] { color: var(--ink); }
 
 /* Layout */
 .wrap { inline-size: var(--wrap); margin-inline: auto; }
@@ -168,6 +168,18 @@ main:focus { outline: none; }
 .facts li::before { content: ""; position: absolute; left: 0; top: .5em; inline-size: 10px; block-size: 10px; border-radius: 3px; background: #19b26e; }
 .facts li:nth-child(3)::before { background: var(--you-solid); }
 .facts strong { color: var(--hero-ink); font-weight: 650; }
+
+/* Страница Алексея: человек, поэтому акцент янтарный */
+.profile-role { margin-block: -8px 18px; font-size: 1.25rem; font-weight: 650; color: var(--p, #f5b453); }
+.profile-photo { justify-self: center; inline-size: min(100%, 440px); }
+.profile-photo img { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 1; object-fit: cover; border-radius: 32px; border: 3px solid #f5b453; box-shadow: 0 40px 80px -30px rgb(0 0 0 / 60%); }
+.profile-numbers > div:first-child { background: var(--people-solid); border-color: var(--people-solid); color: #fff; }
+.profile-numbers > div:first-child dt { color: rgb(255 255 255 / 85%); }
+.does { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; counter-reset: does; }
+.does li { counter-increment: does; display: grid; align-content: start; gap: 8px; padding: 24px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.does li::before { content: counter(does, decimal-leading-zero); font: 700 .875rem/1 var(--mono); color: var(--people); margin-block-end: 6px; }
+.does b { display: block; color: var(--ink); font-size: 1.125rem; }
+.profile-note { margin-block-start: 28px; max-inline-size: 760px; font-size: 1.1875rem; padding-inline-start: 18px; border-inline-start: 3px solid var(--people-solid); }
 
 /* Hero scene — the looping product demo */
 .hero-demo { min-inline-size: 0; }
@@ -522,6 +534,7 @@ main:focus { outline: none; }
   .site-header .button { margin-inline-start: auto; }
   .numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phases, .duo, .panel, .rules, .plans, .story-grid, .faq-wrap { grid-template-columns: 1fr; }
+  .does { grid-template-columns: 1fr 1fr; }
   .phase-daily { position: static; }
   .plan.featured { order: -1; }
 }
@@ -531,6 +544,8 @@ main:focus { outline: none; }
   .numbers > div { padding: 20px 18px; }
   .scene-body { padding: 14px; min-block-size: 330px; }
   .scene-step { display: none; }
+  .does { grid-template-columns: 1fr; }
+  .profile-photo { order: -1; inline-size: min(70%, 280px); justify-self: start; }
   .scene:not([data-scene="1"]) .scene-title > :is(.ag-sep, [data-brand]) { display: none; }
   .scene-bar .scene-pause { margin-inline-start: auto; }
   .f-row { grid-template-columns: 92px 34px 1fr; }

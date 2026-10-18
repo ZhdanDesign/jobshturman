@@ -35,6 +35,11 @@ def codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 
 
+def claude_home() -> Path:
+    """Where Claude Code reads user skills; `claude mcp add` follows the same variable."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
 def _toml_str(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
@@ -100,6 +105,6 @@ def run(skill_dir: str | None = None, from_plugin: bool = False) -> dict:
         targets = [Path.home() / ".agents" / "skills"]
         claude_found = report["agents"][0]["status"] != "not_found"
         if claude_found and not from_plugin:
-            targets.append(Path.home() / ".claude" / "skills")
+            targets.append(claude_home() / "skills")
         report["skills"] = install_skill(Path(skill_dir), targets)
     return report

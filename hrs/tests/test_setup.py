@@ -21,6 +21,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "bin"))  # no real claude/codex
     return tmp_path
 
@@ -93,6 +94,14 @@ def test_skill_goes_next_to_each_agent_but_not_twice_into_claude_from_the_plugin
     assert [s["skill"] for s in report["skills"]] == [str(home / ".agents" / "skills" / "hrshturman")]
     assert not (home / ".claude" / "skills").exists()
     assert report["agents"][0]["status"] == "already"  # the plugin carries no MCP server: setup registers it
+
+
+def test_claude_skill_follows_claude_config_dir(home, monkeypatch):
+    fake_claude(home)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home / "claude-config"))
+    report = setup.run(str(SKILL))
+    assert str(home / "claude-config" / "skills" / "hrshturman") in {s["skill"] for s in report["skills"]}
+    assert not (home / ".claude" / "skills").exists()
 
 
 def test_skill_frontmatter_is_valid():
