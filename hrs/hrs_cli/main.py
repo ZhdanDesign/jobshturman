@@ -4,7 +4,7 @@
   jbs collect <command> ...        vacancy collector: sources, runs, vacancies (see `jbs collect --help`)
   jbs doc import <file>            read a PDF or Word file into the local workspace
   jbs paths                        where hrs keeps its data
-  jbs setup [--skill-dir DIR]      connect hrs to Claude Code and Codex, install the skill
+  jbs setup [--skill-dir DIR]      connect hrs to Claude Code, Codex, Grok Build, Hermes, OpenClaw; install the skill
   jbs login <key> [--server URL]   enter the access key and download the methodology
   jbs sync                         check the key and download a newer methodology
   jbs license                      key state: tariff, end date, renewal link
@@ -56,7 +56,7 @@ def main(argv=None) -> int:
     p = dsub.add_parser("import", help="прочитать PDF/Word в Markdown и сохранить локально")
     p.add_argument("file")
     sub.add_parser("paths", help="где лежат данные")
-    p = sub.add_parser("setup", help="подключить JobShturman к Claude Code и Codex и поставить навык")
+    p = sub.add_parser("setup", help="подключить JobShturman к Claude Code, Codex, Grok Build, Hermes и OpenClaw и поставить навык")
     p.add_argument("--skill-dir", help="папка установочного навыка (с SKILL.md)")
     p.add_argument("--from-plugin", action="store_true", help="навык в Claude Code уже даёт плагин")
     p = sub.add_parser("self-update", help="поставить новую версию программы, если она вышла")

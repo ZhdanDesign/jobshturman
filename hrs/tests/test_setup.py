@@ -1,4 +1,5 @@
-"""`hrs setup` and the bootstrap: connect hrs to Claude Code and Codex without breaking their configs."""
+"""`hrs setup` and the bootstrap: connect hrs to Claude Code, Codex, Grok Build, Hermes and OpenClaw without
+breaking their configs."""
 import json
 import os
 import shutil
@@ -22,6 +23,8 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.delenv("CODEX_HOME", raising=False)
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("OPENCLAW_STATE_DIR", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "bin"))  # no real claude/codex
     return tmp_path
 
@@ -119,7 +122,7 @@ def test_browser_is_registered_for_both_agents_with_its_own_profile(home, monkey
     npx = fake_npx(home)
     (home / ".codex").mkdir()
 
-    first, second = setup.setup_browser(), setup.setup_browser()
+    first, second = ([r for r in setup.setup_browser() if r["status"] != "not_found"] for _ in range(2))
 
     assert [r["status"] for r in first] == ["added", "added"]
     assert [r["status"] for r in second] == ["already", "already"]
@@ -161,3 +164,69 @@ def test_bootstrap_keeps_an_installed_hrs_and_reports_as_json(home):
     out = subprocess.run(["sh", str(SKILL / "scripts" / "bootstrap.sh")], env=env, capture_output=True, text=True,
                          check=False)
     assert out.returncode == 1 and "не нашёл источник" in out.stderr
+
+
+def test_grok_block_is_appended_once(home):
+    config = home / ".grok" / "config.toml"
+    config.parent.mkdir()
+    config.write_text('model = "grok-4"\n', encoding="utf-8")
+    assert setup.setup_grok("/x/hrs")["status"] == "added"
+    assert setup.setup_grok("/y/hrs")["status"] == "already"
+    data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert data["model"] == "grok-4" and data["mcp_servers"]["hrshturman"] == {"command": "/x/hrs", "args": ["serve"]}
+
+
+def test_hermes_entry_goes_under_mcp_servers_once(home):
+    config = home / ".hermes" / "config.yaml"
+    config.parent.mkdir()
+    config.write_text("model: nous\nmcp_servers:\n  github:\n    command: npx\nterminal:\n  backend: local\n",
+                      encoding="utf-8")
+    assert setup.setup_hermes(r"C:\Users\Иван\hrs.exe")["status"] == "added"
+    assert setup.setup_hermes("/y/hrs")["status"] == "already"
+    assert config.read_text(encoding="utf-8") == (
+        'model: nous\nmcp_servers:\n  hrshturman:\n    command: "C:\\\\Users\\\\Иван\\\\hrs.exe"\n'
+        '    args: ["serve"]\n  github:\n    command: npx\nterminal:\n  backend: local\n')
+    (home / ".hermes" / "config.yaml").write_text("mcp_servers: {}\n", encoding="utf-8")
+    assert setup.setup_hermes("/x/hrs")["status"] == "added"
+    assert config.read_text(encoding="utf-8").startswith("mcp_servers:\n  hrshturman:\n")
+    config.write_text("mcp_servers: {github: {command: npx}}\n", encoding="utf-8")
+    assert setup.setup_hermes("/x/hrs")["status"] == "manual"  # flow style: not edited by hand-rolled YAML
+    config.unlink()
+    assert setup.setup_hermes("/x/hrs")["status"] == "added"
+    assert config.read_text(encoding="utf-8").startswith("mcp_servers:\n  hrshturman:\n")
+
+
+def test_openclaw_server_is_set_through_its_cli(home):
+    bin_dir = home / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    db = home / "openclaw-mcp.json"
+    script = bin_dir / "openclaw"
+    script.write_text(f"""#!{sys.executable}
+import json, sys
+from pathlib import Path
+db = Path({str(db)!r})
+servers = json.loads(db.read_text()) if db.exists() else {{}}
+args = sys.argv[1:]
+if args[:2] == ["mcp", "show"]:
+    if args[2] not in servers:
+        sys.exit(1)
+    print(json.dumps(servers[args[2]]))
+    sys.exit(0)
+if args[:2] == ["mcp", "set"]:
+    servers[args[2]] = json.loads(args[3])
+    db.write_text(json.dumps(servers))
+    sys.exit(0)
+sys.exit(2)
+""")
+    script.chmod(0o755)
+    assert setup.setup_openclaw("/x/hrs")["status"] == "added"
+    assert setup.setup_openclaw("/x/hrs")["status"] == "already"
+    assert json.loads(db.read_text()) == {"hrshturman": {"command": "/x/hrs", "args": ["serve"]}}
+
+
+def test_skill_goes_to_grok_hermes_and_openclaw_when_they_are_here(home):
+    for folder in (".grok", ".hermes", ".openclaw"):
+        (home / folder).mkdir()
+    report = setup.run(str(SKILL))
+    assert {s["skill"] for s in report["skills"]} == {
+        str(home / folder / "skills" / "hrshturman") for folder in (".agents", ".grok", ".hermes")}

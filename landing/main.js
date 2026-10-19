@@ -97,7 +97,7 @@ if (scene) {
   setPlaying(playing);
 }
 
-// Вкладки Codex / Claude Code.
+// Вкладки агентов: Codex, Claude Code, Grok Bot, OpenClaw, Hermes, DSH.
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(tab) {
   tabs.forEach((t) => {

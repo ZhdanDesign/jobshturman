@@ -7,8 +7,12 @@
   relies on this too: a plugin `.mcp.json` can't point at ~/.local/bin on every OS.
 - Codex: a `[mcp_servers.hrshturman]` block appended to ~/.codex/config.toml with tool
   approval set to "approve"; without it Codex refuses MCP calls in non-interactive runs.
-- Skill: the installer skill folder is copied to ~/.agents/skills, and to ~/.claude/skills
-  unless it came with the plugin.
+- Grok Build: a `[mcp_servers.hrshturman]` block appended to ~/.grok/config.toml.
+- Hermes: an `hrshturman` entry under `mcp_servers` in ~/.hermes/config.yaml.
+- OpenClaw: `openclaw mcp set hrshturman <json>` (an `mcp.servers` entry in OpenClaw config).
+- Skill: the installer skill folder is copied to ~/.agents/skills (also read by DeepSeek Harness and other
+  agents), to ~/.claude/skills unless it came with the plugin, and to the skills folders of Grok Build,
+  Hermes and OpenClaw when they are on this machine.
 - Browser: a Playwright MCP server named playwright, so the agent applies on hh.ru itself.
   It runs Chrome with its own profile under the hrs data folder: the person signs in once,
   their everyday Chrome stays untouched. Needs Node.js (npx); without it the report says needs_node.
@@ -16,6 +20,7 @@
 The servers are registered with the absolute path to hrs, so agents started from the
 Dock or Start menu find it even when ~/.local/bin is not on their PATH.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -106,13 +111,99 @@ def setup_claude(command: str, name: str = SERVER, args: list[str] | None = None
     return {"agent": "claude", "status": "added", "command": command}
 
 
+def grok_home() -> Path:
+    return Path.home() / ".grok"
+
+
+def hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+
+
+def openclaw_home() -> Path:
+    return Path(os.environ.get("OPENCLAW_STATE_DIR") or Path.home() / ".openclaw")
+
+
+def setup_grok(command: str, name: str = SERVER, args: list[str] | None = None) -> dict:
+    home = grok_home()
+    if not home.exists() and not shutil.which("grok"):
+        return {"agent": "grok", "status": "not_found"}
+    config = home / "config.toml"
+    text = config.read_text(encoding="utf-8") if config.exists() else ""
+    current = tomllib.loads(text).get("mcp_servers", {}).get(name) if text else None
+    if current is not None:
+        return {"agent": "grok", "status": "already", "config": str(config)}
+    block = (f"\n[mcp_servers.{name}]\n"
+             f"command = {_toml_str(command)}\n"
+             f"args = [{', '.join(_toml_str(a) for a in (args or ['serve']))}]\n")
+    home.mkdir(parents=True, exist_ok=True)
+    if text:
+        shutil.copy2(config, config.with_name("config.toml.bak-hrs"))
+    config.write_text(text.rstrip("\n") + ("\n" if text else "") + block, encoding="utf-8")
+    tomllib.loads(config.read_text(encoding="utf-8"))  # never leave a broken config behind
+    return {"agent": "grok", "status": "added", "config": str(config)}
+
+
+def _yaml_str(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def setup_hermes(command: str, name: str = SERVER, args: list[str] | None = None) -> dict:
+    """Hermes keeps MCP servers under the top-level `mcp_servers` key of config.yaml. Without a YAML library
+    the entry goes in only where that is unambiguous: no such key yet, or the key itself on its own line."""
+    home = hermes_home()
+    if not home.exists() and not shutil.which("hermes"):
+        return {"agent": "hermes", "status": "not_found"}
+    config = home / "config.yaml"
+    entry = (f"  {name}:\n    command: {_yaml_str(command)}\n"
+             f"    args: [{', '.join(_yaml_str(a) for a in (args or ['serve']))}]\n")
+    lines = config.read_text(encoding="utf-8").splitlines(keepends=True) if config.exists() else []
+    key = next((i for i, line in enumerate(lines) if line.split("#")[0].rstrip() in ("mcp_servers:", "mcp_servers: {}")), None)
+    if key is None and any(line.startswith("mcp_servers:") for line in lines):
+        return {"agent": "hermes", "status": "manual", "config": str(config),
+                "message": f"Добавьте сервер в mcp_servers файла {config} вручную:\n{entry}"}
+    if key is not None:
+        block = [line for line in lines[key + 1:]]
+        end = next((j for j, line in enumerate(block) if line.strip() and not line.startswith((" ", "\t", "#"))), len(block))
+        if any(line.strip().rstrip(":") == name and line.startswith("  ") and not line.startswith("   ")
+               for line in block[:end]):
+            return {"agent": "hermes", "status": "already", "config": str(config)}
+        lines[key] = "mcp_servers:\n"
+        lines[key + 1:key + 1] = [entry]
+    else:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines += ["mcp_servers:\n", entry]
+    home.mkdir(parents=True, exist_ok=True)
+    if config.exists():
+        shutil.copy2(config, config.with_name("config.yaml.bak-hrs"))
+    config.write_text("".join(lines), encoding="utf-8")
+    return {"agent": "hermes", "status": "added", "config": str(config)}
+
+
+def setup_openclaw(command: str, name: str = SERVER, args: list[str] | None = None) -> dict:
+    openclaw = shutil.which("openclaw")
+    if not openclaw:
+        return {"agent": "openclaw", "status": "not_found"}
+    shown = subprocess.run([openclaw, "mcp", "show", name], capture_output=True, text=True, timeout=60, check=False)
+    if shown.returncode == 0 and command in shown.stdout:
+        return {"agent": "openclaw", "status": "already"}
+    value = json.dumps({"command": command, "args": args or ["serve"]}, ensure_ascii=False)
+    added = subprocess.run([openclaw, "mcp", "set", name, value], capture_output=True, text=True, timeout=60, check=False)
+    if added.returncode != 0:
+        return {"agent": "openclaw", "status": "error", "message": (added.stderr or added.stdout).strip()}
+    return {"agent": "openclaw", "status": "added"}
+
+
+AGENTS = (setup_claude, setup_codex, setup_grok, setup_hermes, setup_openclaw)
+
+
 def setup_browser() -> list[dict]:
     server = browser_server()
     if server is None:
         return [{"agent": "browser", "status": "needs_node",
                  "message": "Нет Node.js: агент не сможет откликаться через браузер. Поставьте Node.js LTS и повторите jbs setup"}]
     command, args = server
-    return [setup_claude(command, name=BROWSER, args=args), setup_codex(command, name=BROWSER, args=args)]
+    return [setup(command, name=BROWSER, args=args) for setup in AGENTS]
 
 
 def install_skill(skill_dir: Path, targets: list[Path]) -> list[dict]:
@@ -133,12 +224,14 @@ def install_skill(skill_dir: Path, targets: list[Path]) -> list[dict]:
 
 def run(skill_dir: str | None = None, from_plugin: bool = False) -> dict:
     command = hrs_command()
-    report = {"hrs": command, "agents": [setup_claude(command), setup_codex(command)],
+    report = {"hrs": command, "agents": [setup(command) for setup in AGENTS],
               "browser": setup_browser(), "skills": []}
     if skill_dir:
         targets = [Path.home() / ".agents" / "skills"]
-        claude_found = report["agents"][0]["status"] != "not_found"
-        if claude_found and not from_plugin:
+        found = {a["agent"] for a in report["agents"] if a["status"] != "not_found"}
+        if "claude" in found and not from_plugin:
             targets.append(claude_home() / "skills")
+        homes = {"grok": grok_home(), "hermes": hermes_home(), "openclaw": openclaw_home()}
+        targets += [homes[agent] / "skills" for agent in ("grok", "hermes", "openclaw") if agent in found]
         report["skills"] = install_skill(Path(skill_dir), targets)
     return report

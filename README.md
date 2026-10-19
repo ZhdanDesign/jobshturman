@@ -53,7 +53,7 @@ uv tool uninstall hrshturman
 rm -rf ~/Library/Application\ Support/HRShturman ~/.claude/skills/hrshturman ~/.agents/skills/hrshturman
 ```
 
-Блок `[mcp_servers.hrshturman]` из `~/.codex/config.toml` удалите вручную.
+Блок `[mcp_servers.hrshturman]` из `~/.codex/config.toml` и `~/.grok/config.toml`, запись `hrshturman` в `mcp_servers` файла `~/.hermes/config.yaml` удалите вручную, в OpenClaw: `openclaw mcp unset hrshturman`.
 
 ## Состав репозитория
 

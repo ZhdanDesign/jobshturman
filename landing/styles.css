@@ -400,6 +400,11 @@ main:focus { outline: none; }
 .install { border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); padding: clamp(18px, 3vw, 32px); }
 .tabs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-block-end: 24px; }
 .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
+.vh { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Бета: кружок «β» на вкладке агента, подсказка при наведении */
+.beta { position: relative; display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; margin-inline-start: -2px; border-radius: 50%; background: var(--people-soft); color: var(--people); font: 700 .75rem/1 var(--font); }
+.beta::after { content: attr(data-tip); position: absolute; inset-inline-end: -8px; inset-block-end: calc(100% + 10px); inline-size: max-content; max-inline-size: 220px; padding: 8px 10px; border-radius: 8px; background: #111614; color: #fff; font: 500 .8125rem/1.35 var(--font); white-space: normal; text-align: start; box-shadow: 0 6px 18px rgb(0 0 0 / 18%); opacity: 0; visibility: hidden; transition: opacity .15s var(--ease); pointer-events: none; z-index: 5; }
+[role="tab"]:hover .beta::after, [role="tab"]:focus-visible .beta::after { opacity: 1; visibility: visible; }
 .soon { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .soon li { display: inline-flex; align-items: center; gap: 8px; min-block-size: 44px; padding: 8px 14px; border-radius: 12px; border: 1.5px dashed var(--line-strong); color: var(--muted); font-weight: 600; cursor: default; }
 .soon .logo { filter: grayscale(1); opacity: .7; }
@@ -456,6 +461,36 @@ main:focus { outline: none; }
 .send { inline-size: 32px; block-size: 32px; display: grid; place-items: center; flex: none; border-radius: 50%; background: #111; color: #fff; }
 .send svg { inline-size: 18px; block-size: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .send-claude { border-radius: 10px; background: #d97757; }
+/* Остальные агенты: чат Grok Bot, терминал Hermes, чат в мессенджере (OpenClaw), приложение DeepSeek (DSH) */
+.app-term { background: #0c0c0c; color: #e6e6e6; color-scheme: dark; border-color: #2a2a2a; }
+.app-term .app-bar { border-color: #262626; }
+.app-term .app-sub { color: #8a8a8a; }
+.app-term .app-body { font: .8125rem/1.6 var(--mono); gap: 6px; }
+.app-term .msg { max-inline-size: 100%; padding: 0; border-radius: 0; background: none; }
+.app-term .msg.you { justify-self: start; color: #fff; font-weight: 600; }
+.app-term .msg.you::before { content: "› "; color: var(--term-accent); }
+.app-term .msg.agent { color: #c9c9c9; }
+.app-term .msg.run { padding: 8px 10px; border: 1px solid #333; border-radius: 6px; background: #161616; }
+.app-term .msg.ok { color: #4ade80; }
+.app-term .app-input { background: #141414; border-color: #333; border-radius: 8px; color: #7a7a7a; font-family: var(--mono); font-size: .8125rem; }
+.app-term .allow { background: var(--term-accent); color: #0c0c0c; }
+.app-grokbot { background: #fff; }
+.app-grokbot .msg.you { background: #f1f0ee; color: #0a0a0a; }
+.app-grokbot .send { background: #0a0a0a; }
+.app-hermes { --term-accent: #e6b450; background: #15131f; border-color: #2f2b45; }
+.app-hermes .app-bar { border-color: #2f2b45; color: #e6b450; }
+.app-hermes .app-input { background: #1d1a2b; border-color: #2f2b45; }
+.app-hermes .send { background: #e6b450; color: #15131f; border-radius: 8px; }
+.app-chat { background: #fff; }
+.app-chat .app-body { background: #dfe7ec; }
+.app-chat .msg { box-shadow: 0 1px 1px rgb(0 0 0 / 10%); }
+.app-chat .msg.you { background: #e3f7cf; color: #18330c; }
+.app-chat .msg.agent { justify-self: start; background: #fff; padding-inline: 14px; border-end-start-radius: 4px; }
+.app-chat .app-input { margin: 0; border-radius: 0; border-width: 1px 0 0; }
+.app-chat .send { background: #2aabee; }
+.app-dsh { background: #fff; }
+.app-dsh .msg.you { background: #edf1ff; color: #1d2f8f; }
+.app-dsh .send { background: #4d6bfe; }
 .js .app .msg { opacity: 0; translate: 0 8px; }
 .app.is-playing .msg { animation: msg-in .45s var(--ease) forwards; animation-delay: calc(var(--i) * 900ms + 200ms); }
 @keyframes msg-in { to { opacity: 1; translate: 0 0; } }
@@ -571,7 +606,9 @@ main:focus { outline: none; }
 @media (max-width: 900px) {
   .site-header { gap: 12px; }
   .site-header > .button { margin-inline-start: auto; }
-  .menu-toggle { display: flex; }
+  .menu-toggle { display: flex; margin-inline-start: auto; }
+  /* Где есть гамбургер, «Написать Алексею» живёт только в меню */
+  .site-header:has(.menu-toggle) > .header-cta { display: none; }
   .site-header nav { display: none; position: absolute; inset-inline: 0; top: 100%; flex-direction: column; gap: 0; margin: 0; padding: 8px var(--gutter) 20px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 12px 24px rgb(0 0 0 / 12%); font-size: 1.0625rem; }
   .menu-open nav { display: flex; }
   .site-header nav a { padding: 12px 0; color: var(--ink); border-bottom: 1px solid var(--line); }
@@ -606,5 +643,10 @@ main:focus { outline: none; }
   .doc-toc ol { columns: 1; }
   .tabs { display: flex; flex: 1 1 100%; }
   .soon li { padding-inline: 10px; }
-  .tabs [role="tab"] { flex: 1; justify-content: center; padding-inline: 8px; gap: 8px; white-space: nowrap; }
+  .tabs { flex-wrap: wrap; }
+  .tabs [role="tab"] { flex: 1 1 30%; justify-content: center; padding-inline: 8px; gap: 8px; white-space: nowrap; }
+  /* Подсказка беты по центру вкладки, чтобы не уходила за край экрана */
+  .tabs [role="tab"]:has(.beta) { position: relative; }
+  .beta { position: static; }
+  .beta::after { inset-inline-end: auto; left: 50%; transform: translateX(-50%); max-inline-size: 180px; inset-block-end: calc(100% + 6px); }
 }

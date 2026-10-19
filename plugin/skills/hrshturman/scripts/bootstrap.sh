@@ -11,7 +11,7 @@
 # from GitHub is installed.
 #
 # Steps: install uv if missing, install hrs with its own Python 3.12, then `hrs setup`
-# connects it to Claude Code and Codex and copies this skill next to them.
+# connects it to the agents found here (Claude Code, Codex, Grok Build, Hermes, OpenClaw) and copies this skill next to them.
 set -eu
 
 SKILL_DIR=$(cd "$(dirname "$0")/.." && pwd)
