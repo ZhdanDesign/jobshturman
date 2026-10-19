@@ -210,3 +210,18 @@ if (path) {
   addEventListener("resize", request);
   update();
 }
+
+// Мобильное меню: гамбургер раскрывает разделы, выбор пункта закрывает меню.
+const siteHeader = document.querySelector(".site-header");
+const menuToggle = siteHeader?.querySelector(".menu-toggle");
+if (menuToggle) {
+  const setMenu = (open) => {
+    siteHeader.classList.toggle("menu-open", open);
+    menuToggle.setAttribute("aria-expanded", String(open));
+    menuToggle.setAttribute("aria-label", open ? "Закрыть меню" : "Открыть меню");
+  };
+  menuToggle.addEventListener("click", () => setMenu(!siteHeader.classList.contains("menu-open")));
+  siteHeader.querySelectorAll("nav a").forEach((link) => link.addEventListener("click", () => setMenu(false)));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
+  document.addEventListener("click", (e) => { if (!siteHeader.contains(e.target)) setMenu(false); });
+}

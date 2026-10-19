@@ -141,6 +141,13 @@ main:focus { outline: none; }
 .site-header nav { display: flex; gap: 22px; margin-inline-start: auto; font-size: .9375rem; }
 .site-header nav a { text-decoration: none; color: var(--muted); }
 .site-header nav a:hover, .site-header nav a[aria-current] { color: var(--ink); }
+/* Гамбургер и кнопка «Написать Алексею» в меню видны только на узком экране */
+.menu-toggle { display: none; flex: none; flex-direction: column; justify-content: center; gap: 5px; inline-size: 40px; block-size: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer; }
+.menu-toggle span { display: block; block-size: 2px; border-radius: 2px; background: currentColor; transition: transform .2s, opacity .2s; }
+.menu-open .menu-toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.menu-open .menu-toggle span:nth-child(2) { opacity: 0; }
+.menu-open .menu-toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+.site-header nav .nav-cta { display: none; }
 
 /* Layout */
 .wrap { inline-size: var(--wrap); margin-inline: auto; }
@@ -558,8 +565,13 @@ main:focus { outline: none; }
   .terms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .site-header nav { display: none; }
-  .site-header .button { margin-inline-start: auto; }
+  .site-header { gap: 12px; }
+  .site-header .header-cta { margin-inline-start: auto; }
+  .menu-toggle { display: flex; }
+  .site-header nav { display: none; position: absolute; inset-inline: 0; top: 100%; flex-direction: column; gap: 0; margin: 0; padding: 8px var(--gutter) 20px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 12px 24px rgb(0 0 0 / 12%); font-size: 1.0625rem; }
+  .menu-open nav { display: flex; }
+  .site-header nav a { padding: 12px 0; color: var(--ink); border-bottom: 1px solid var(--line); }
+  .site-header nav .nav-cta { display: flex; justify-content: center; margin-block-start: 16px; padding: .8em 1.5em; border-bottom: 0; color: #fff; }
   .numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phases, .duo, .panel, .rules, .plans, .story-grid, .faq-wrap { grid-template-columns: 1fr; }
   .does { grid-template-columns: 1fr 1fr; }
