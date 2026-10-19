@@ -9,7 +9,7 @@ const filters = { query: "", status: "all", tariff: "all" };
 const data = { keys: [], tariffs: [], stats: null, current: null, role: null, draft: null, route: null, file: null };
 const statusNames = { active: "Активен", expiring: "Истекает", expired: "Истёк", revoked: "Заблокирован" };
 const reasonNames = { refund: "Возврат оплаты", violation: "Нарушение условий", reissue: "Перевыпуск ключа", other: "Другое" };
-const deniedNames = { revoked: "ключ заблокирован", expired: "срок истёк", device_limit: "превышен лимит устройств" };
+const deniedNames = { revoked: "ключ заблокирован", expired: "срок истёк", device_limit: "превышен лимит устройств", export: "просил выгрузить всю методику" };
 // Методика: главный промпт — файл внутри пакета, агент читает его первым (key-server/API.md, «Редактор методики»).
 const GENESIS = "agent/genesis.md";
 const MANIFEST = "library_manifest.json";

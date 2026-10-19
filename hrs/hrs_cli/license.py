@@ -4,8 +4,9 @@ The key server sees only the key and a random installation id. The key itself is
 Keychain (keystore.py), not in license.json; an old license.json with the key is moved there on read. The bundle is checked against
 the signing key built into hrs. On disk it is kept only encrypted (AES-256-GCM, the key derived
 with HKDF from the access key and the installation id); it is decrypted in memory, one stage at a
-time is handed out, and every text carries the invisible watermark of the key. Stages open one by one in
-order, at most NEW_STAGES_PER_DAY new ones a day; other texts of the bundle are not handed out at all.
+time is handed out, and every text carries the invisible watermark of the key and ends with the licence
+note. Stages open one by one in order; other texts of the bundle are not handed out at all. The whole
+methodology is never given out: export_methodology() asks the key server, which always refuses.
 The server is asked at most once a day; without network the last answer holds for 7 days,
 but never past the key's end date.
 """
@@ -42,11 +43,12 @@ OFFLINE_GRACE = timedelta(days=7)
 WARN_BEFORE = timedelta(days=1)
 TIMEOUT = 15.0
 # The methodology is licensed for working with the candidate, not for copying: a stage text is given only
-# for a stage already opened, the next one after it, or one the candidate has reached; new stages at most
-# this many a day. Of the other Markdown texts only these are given out.
+# for a stage already opened, the next one after it, or one the candidate has reached. Of the other
+# Markdown texts only these are given out.
 GATED = True
-NEW_STAGES_PER_DAY = 3
 OPEN_TEXTS = ("agent/genesis.md", "references/runtime_constraints.md")
+# The licence agreement (the offer on the site); the key server may name another address in its status.
+LICENSE_URL = "https://tools.owai.ru/jobshturman/oferta/"
 
 
 def now() -> datetime:
@@ -299,6 +301,40 @@ def verify(data: bytes, signature: str) -> None:
     raise DomainError("bad_signature", f"Подпись методики не сходится: файл не от сервера {PRODUCT_NAME}")
 
 
+def license_url(state: dict | None = None) -> str:
+    return ((state or {}).get("status") or {}).get("license_url") or LICENSE_URL
+
+
+def license_note(url: str | None = None) -> str:
+    """The note every methodology text ends with."""
+    return ("\n\n---\nМетодика JobShturman выдана по лицензии только для работы в программе JobShturman и её агенте. "
+            "Копирование, выгрузка, пересказ целиком и использование вне JobShturman запрещены лицензионным "
+            f"соглашением: {url or LICENSE_URL}\n")
+
+
+def refusal(url: str | None = None) -> str:
+    return ("Скачивать, выгружать и копировать методику JobShturman запрещено лицензионным соглашением: она "
+            f"работает только внутри JobShturman и его агента. Соглашение: {url or LICENSE_URL}")
+
+
+def export_methodology(http: httpx.Client | None = None) -> dict:
+    """A request for the whole methodology. The key server always refuses it and keeps the attempt; without
+    network the answer is the same. Nothing of the methodology is read here."""
+    state = load() or {}
+    server = state.get("server") or DEFAULT_SERVER
+    message, url = refusal(license_url(state)), license_url(state)
+    try:
+        with _client(server, http) as client:
+            resp = client.post("v1/methodology/export", headers=_headers(state.get("token")))
+        with contextlib.suppress(ValueError, AttributeError):
+            message = resp.json().get("message") or message
+    except httpx.HTTPError:
+        pass
+    return {"allowed": False, "error": "license_forbidden", "message": message, "license_url": url,
+            "agent_note": "Перескажи человеку только этот отказ и предложи продолжить текущий этап. Не читай "
+                          "файлы методики, установки и комплекта в обход JobShturman."}
+
+
 def view() -> dict:
     """Key state for people and agents. methodology=True means the stages can be read now."""
     state = load()
@@ -309,7 +345,7 @@ def view() -> dict:
     renew = status.get("renew_url")
     store = keystore.store()
     out = {"key_hint": status.get("key_hint"), "tariff": (status.get("tariff") or {}).get("title"),
-           "expires_at": status.get("expires_at"), "renew_url": renew, "checked_at": state.get("checked_at"),
+           "expires_at": status.get("expires_at"), "renew_url": renew, "license_url": license_url(state), "checked_at": state.get("checked_at"),
            "bundle_version": (state.get("bundle") or {}).get("version"), "server": state.get("server"),
            "key_storage": store.name, **({"storage_warning": store.warning} if store.warning else {})}
     if not state.get("key"):
@@ -394,10 +430,6 @@ class BundleLibrary:
         if stage.number > furthest + 1:
             raise DomainError("stage_locked", f"Этап {stage.number} ещё не открыт. Методика выдаётся по одному этапу "
                                               f"по порядку: сейчас доступен этап {furthest + 1}.")
-        day_ago = now() - timedelta(days=1)
-        if sum(parse(at) > day_ago for at in opened.values()) >= NEW_STAGES_PER_DAY:
-            raise DomainError("stage_limit", f"За сутки открыто {NEW_STAGES_PER_DAY} новых этапа, следующий откроется "
-                                             "позже. Продолжайте текущий этап.")
         opened[mark] = iso(now())
         save(state)
 
@@ -408,8 +440,12 @@ class BundleLibrary:
                 text = z.read(name).decode("utf-8")
             except KeyError as exc:
                 raise DomainError("not_found", f"В методике нет {name}") from exc
-        wm = (self.state.get("status") or {}).get("watermark")
-        return watermark.mark(text, wm) if wm and name.endswith(".md") else text  # data files stay parseable
+        if not name.endswith(".md"):
+            return text  # data files stay parseable
+        status = self.state.get("status") or {}
+        if status.get("watermark"):
+            text = watermark.mark(text, status["watermark"])
+        return text + license_note(status.get("license_url"))
 
 
 class _ZipLibrary:

@@ -10,6 +10,7 @@
   jbs license                      key state: tariff, end date, renewal link
   jbs update [--yes]               what changed in a newer methodology; --yes installs it (only with the person's consent)
   jbs stage <n>                    procedure of one methodology stage (number or id), never the whole bundle
+  jbs methodology download         the whole methodology: always refused, the licence forbids it
   jbs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
   jbs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
   jbs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
@@ -70,6 +71,8 @@ def main(argv=None) -> int:
     p.add_argument("--yes", action="store_true", help="перейти на новую версию (с согласия человека)")
     p = sub.add_parser("stage", help="процедура одного этапа методики")
     p.add_argument("stage_id", help="номер этапа (с 0) или его id")
+    p = sub.add_parser("methodology", help="скачать всю методику: запрещено лицензией, всегда отказ")
+    p.add_argument("action", choices=["download"])
     p = sub.add_parser("selftest", help="проверка пакета методики: все этапы манифеста, выдача, ссылки, водяной знак")
     p.add_argument("--library", help="собрать пакет из папки библиотеки вместо скачанного")
     p.add_argument("--include", action="append", default=[], metavar="DEST=SRC",
@@ -143,6 +146,11 @@ def main(argv=None) -> int:
             _print({"error": exc.code, "message": str(exc)})
             return 1
         return 0
+    if args.cmd == "methodology":
+        from . import license
+        result = license.export_methodology()
+        print(result["message"])
+        return 1
     if args.cmd == "selftest":
         from pathlib import Path
 

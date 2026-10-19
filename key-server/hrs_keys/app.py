@@ -130,6 +130,12 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
             "X-Bundle-Signature": meta["signature"],
             "Content-Disposition": f'attachment; filename="methodology-{meta["version"]}.zip"'})
 
+    @app.post("/v1/methodology/export")
+    def export(authorization: str | None = Header(None)):
+        """Download the whole methodology: always refused by the licence."""
+        scheme, _, value = (authorization or "").partition(" ")
+        ks.export(value.strip() if scheme.lower() == "bearer" else None)
+
     @app.post("/v1/bundle/accept")
     def accept(body: Accept, authorization: str | None = Header(None), x_hrs_version: str | None = Header(None)):
         return ks.accept(bearer(authorization), body.version, x_hrs_version)

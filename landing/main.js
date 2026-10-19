@@ -225,3 +225,15 @@ if (menuToggle) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
   document.addEventListener("click", (e) => { if (!siteHeader.contains(e.target)) setMenu(false); });
 }
+
+// Номер последней версии берётся со страницы «Что нового»: при выпуске правится только она.
+const latestVersion = document.querySelector("[data-latest-version]");
+if (latestVersion) {
+  fetch(new URL("releases/", document.baseURI))
+    .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+    .then((html) => {
+      const first = new DOMParser().parseFromString(html, "text/html").querySelector(".release[data-version]");
+      if (first) latestVersion.textContent = first.dataset.version;
+    })
+    .catch(() => {});
+}

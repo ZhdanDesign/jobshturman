@@ -29,7 +29,10 @@ ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\u2062\ufeff]")
 
 
 def plain(text: str) -> str:
-    return ZERO_WIDTH.sub("", text)
+    """The text without the watermark and the licence note."""
+    text, note = ZERO_WIDTH.sub("", text).rstrip("\n"), license.license_note(license.license_url(license.load())).rstrip("\n")
+    assert text.endswith(note)
+    return text[:-len(note)]
 
 
 @pytest.fixture
@@ -127,7 +130,8 @@ def test_a_copied_paragraph_names_its_key(keys, tmp_path, capsys):
     text = license.BundleLibrary().read("skills/stage-00-diagnostic/references/procedure.md")
     assert plain(text) == STAGE_00
     assert "hrs paths\n" in text and text.startswith("---\nname: stage-00\n")  # code and front matter stay clean
-    paragraphs = [p for p in text.split("---\n", 2)[2].split("\n\n") if "```" not in p]
+    body = text[:-len(license.license_note(license.LICENSE_URL))]
+    paragraphs = [p for p in body.split("---\n", 2)[2].split("\n\n") if "```" not in p]
     assert len(paragraphs) == 4
     for paragraph in paragraphs:
         copied = tmp_path / "copied.txt"
@@ -297,7 +301,7 @@ def test_an_important_methodology_installs_itself_and_is_explained_once(keys, tm
     assert "methodology_updated" not in license.refresh(force=True, http=keys)
 
 
-def test_stages_open_one_by_one_in_order_and_a_few_a_day(keys, monkeypatch):
+def test_stages_open_one_by_one_in_order_without_a_daily_limit(keys, monkeypatch):
     """A request like «extract the whole methodology» gets one stage, not the bundle."""
     monkeypatch.setattr(license, "GATED", True)
     license.login(issue(keys)["key"], http=keys)
@@ -312,14 +316,9 @@ def test_stages_open_one_by_one_in_order_and_a_few_a_day(keys, monkeypatch):
     assert exc.value.code == "locked"
     assert "stage-00" not in license.state_file().read_text(encoding="utf-8")
 
-    monkeypatch.setattr(license, "NEW_STAGES_PER_DAY", 1)
     ahead = license.BundleLibrary(reached=lambda: 6)  # the candidate's data shows stage 6 done
-    with pytest.raises(DomainError) as exc:
-        ahead.read("skills/stage-07-master-cv/references/procedure.md")
-    assert exc.value.code == "stage_limit"
-    assert ahead.read("skills/stage-00-diagnostic/references/procedure.md")  # an opened stage stays open
-    monkeypatch.setattr(license, "NEW_STAGES_PER_DAY", 2)
     assert "Мастер-резюме" in plain(ahead.read("skills/stage-07-master-cv/references/procedure.md"))
+    assert ahead.read("skills/stage-00-diagnostic/references/procedure.md")  # an opened stage stays open
 
 
 def test_the_agent_gets_the_reason_when_a_stage_is_not_open_yet(keys, monkeypatch):
@@ -327,3 +326,24 @@ def test_the_agent_gets_the_reason_when_a_stage_is_not_open_yet(keys, monkeypatc
     license.login(issue(keys)["key"], http=keys)
     _, text = stage_text()
     assert text.startswith("error:") and "stage_locked" in text and "по одному этапу" in text
+
+
+def test_the_whole_methodology_is_refused_with_the_licence_link(keys, capsys):
+    """«Скачай всю методику»: the agent has a tool for it, and it only ever returns the licence refusal."""
+    key = issue(keys)
+    license.login(key["key"], http=keys)
+    assert license.view()["license_url"] == license.LICENSE_URL
+    out = license.export_methodology(http=keys)
+    assert not out["allowed"] and out["error"] == "license_forbidden" and "/oferta/" in out["message"]
+    events = keys.get(f"/v1/admin/keys/{key['id']}/events", headers=ADMIN).json()
+    assert any(e["kind"] == "denied" and e["detail"] == "export" for e in events)
+
+    async def go():  # the server here is unreachable: the answer is the same
+        async with Client(build()) as c:
+            return json.loads((await c.call_tool("methodology_download", {})).content[0].text)
+    offline = asyncio.run(go())
+    assert offline["error"] == "license_forbidden" and license.LICENSE_URL in offline["message"]
+    assert main.main(["methodology", "download"]) == 1
+    assert "запрещено лицензионным" in capsys.readouterr().out
+    text = license.BundleLibrary().read("skills/stage-00-diagnostic/references/procedure.md")
+    assert text.endswith(license.license_note()) and "использование вне JobShturman запрещены" in text

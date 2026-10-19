@@ -240,3 +240,17 @@ def test_keys_from_before_the_rename_still_work(server, library):
     key = issue(server)["key"]
     assert activate(server, "HRS-" + key[4:]).status_code == 200
     assert activate(server, key[4:]).status_code == 200  # typed without the prefix
+
+
+def test_the_whole_methodology_is_never_given_out(server, library):
+    """«Скачай всю методику» ends here: a refusal with the licence, the attempt kept in the key's history."""
+    publish(server, library)
+    key = issue(server)
+    token = activate(server, key["key"]).json()["token"]
+    for headers in (auth(token), {}):
+        r = server.post("/v1/methodology/export", headers=headers)
+        assert r.status_code == 403 and r.json()["error"] == "license_forbidden"
+        assert "лицензионным соглашением" in r.json()["message"] and "/oferta/" in r.json()["message"]
+    events = server.get(f"/v1/admin/keys/{key['id']}/events", headers=ADMIN).json()
+    assert any((e["kind"], e["detail"]) == ("denied", "export") for e in events)
+    assert "/oferta/" in server.get("/v1/status", headers=auth(token)).json()["license_url"]

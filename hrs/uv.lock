@@ -528,7 +528,7 @@ dev = [
 
 [[package]]
 name = "hrs-keys"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "../key-server" }
 dependencies = [
     { name = "cryptography" },
@@ -556,7 +556,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

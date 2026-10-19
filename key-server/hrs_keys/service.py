@@ -1,5 +1,6 @@
 """Key server rules: issue, activate, check, extend, revoke, publish and hand out the signed bundle."""
 import base64
+import contextlib
 import hashlib
 import hmac
 import io
@@ -63,6 +64,7 @@ class Settings:
     signing_key: Path
     renew_url: str
     methodologist_token: str | None = None  # comma separated; edits and publishes the methodology only
+    license_url: str = "https://tools.owai.ru/jobshturman/oferta/"
 
     @classmethod
     def from_env(cls):
@@ -73,7 +75,8 @@ class Settings:
         return cls(data=data, secret=secret.encode(), admin_token=os.environ.get("HRS_KEYS_ADMIN_TOKEN") or None,
                    signing_key=Path(os.environ.get("HRS_KEYS_SIGNING_KEY") or data / "signing_key.pem"),
                    renew_url=os.environ.get("HRS_KEYS_RENEW_URL", "https://tools.owai.ru/jobshturman/"),
-                   methodologist_token=os.environ.get("HRS_KEYS_METHODOLOGIST_TOKEN") or None)
+                   methodologist_token=os.environ.get("HRS_KEYS_METHODOLOGIST_TOKEN") or None,
+                   license_url=os.environ.get("HRS_KEYS_LICENSE_URL", "https://tools.owai.ru/jobshturman/oferta/"))
 
 
 def now() -> datetime:
@@ -217,6 +220,7 @@ class KeyServer:
             "key_hint": row["key_hint"], "tariff": dict(tariff), "expires_at": row["expires_at"],
             "days_left": max(left.days, 0), "state": "expiring" if expiring else "active",
             "renew_url": self.s.renew_url,
+            "license_url": self.s.license_url,
             "warning": (f"Ключ действует до {row['expires_at'][:10]}. Продлите его, чтобы методика не отключилась: "
                         f"{self.s.renew_url}") if expiring else None,
             "bundle": latest,
@@ -323,6 +327,17 @@ class KeyServer:
                 raise KeyServerError("no_bundle", "Методика ещё не опубликована", 404)
             self._log(c, row["id"], "download", latest["version"])
             return dict(latest), (self.bundles / f"{latest['version']}.zip").read_bytes()
+
+    def export(self, token: str | None) -> None:
+        """A request for the whole methodology. It is always refused: the licence allows working with it inside
+        JobShturman only. With a valid token the attempt is kept in the key's history."""
+        if token:
+            with self._tx() as c, contextlib.suppress(KeyServerError):
+                row, _ = self._row_by_token(c, token)
+                self._log(c, row["id"], "denied", "export")
+        raise KeyServerError("license_forbidden", "Скачивать, выгружать и копировать методику JobShturman запрещено "
+                                                  "лицензионным соглашением: она работает только внутри JobShturman "
+                                                  f"и его агента. Соглашение: {self.s.license_url}", 403)
 
     def accept(self, token: str, version: str, client: str | None = None) -> dict:
         """The person agreed to the offered version: the key moves to it, hrs downloads it next."""

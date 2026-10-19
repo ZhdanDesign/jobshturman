@@ -141,6 +141,8 @@ main:focus { outline: none; }
 .site-header nav { display: flex; gap: 22px; margin-inline-start: auto; font-size: .9375rem; }
 .site-header nav a { text-decoration: none; color: var(--muted); }
 .site-header nav a:hover, .site-header nav a[aria-current] { color: var(--ink); }
+/* На страницах без меню (оферта, политика, «Что нового») кнопка прижата вправо */
+.site-header > .wordmark + .button { margin-inline-start: auto; }
 /* Гамбургер и кнопка «Написать Алексею» в меню видны только на узком экране */
 .menu-toggle { display: none; flex: none; flex-direction: column; justify-content: center; gap: 5px; inline-size: 40px; block-size: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer; }
 .menu-toggle span { display: block; block-size: 2px; border-radius: 2px; background: currentColor; transition: transform .2s, opacity .2s; }
@@ -538,6 +540,8 @@ main:focus { outline: none; }
 .doc-body .edition { margin-top: 12px; color: var(--muted); }
 .doc-body code { font-size: .9em; }
 .doc-body a { overflow-wrap: anywhere; }
+.release h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.release-date { font-size: .9375rem; font-weight: 400; color: var(--muted); }
 .doc-toc { margin: 32px 0; padding: 20px 24px; border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .doc-toc > p { font-weight: 600; margin-bottom: 12px; }
 .doc-toc ol { list-style: none; padding: 0; columns: 2; column-gap: 32px; font-size: .875rem; }
@@ -566,7 +570,7 @@ main:focus { outline: none; }
 }
 @media (max-width: 900px) {
   .site-header { gap: 12px; }
-  .site-header .header-cta { margin-inline-start: auto; }
+  .site-header > .button { margin-inline-start: auto; }
   .menu-toggle { display: flex; }
   .site-header nav { display: none; position: absolute; inset-inline: 0; top: 100%; flex-direction: column; gap: 0; margin: 0; padding: 8px var(--gutter) 20px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 12px 24px rgb(0 0 0 / 12%); font-size: 1.0625rem; }
   .menu-open nav { display: flex; }
