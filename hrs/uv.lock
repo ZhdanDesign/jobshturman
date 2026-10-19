@@ -556,7 +556,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -594,7 +594,7 @@ source = { editable = "../core" }
 
 [[package]]
 name = "hrshturman-local"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "../local-app" }
 dependencies = [
     { name = "fpdf2" },

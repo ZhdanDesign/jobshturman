@@ -7,6 +7,7 @@
 
 Times are the computer's local time. Every task runs `python -m hrs_cli schedule run <task>` with the
 same interpreter and data folder as the install. Nothing here applies or writes to an employer.
+The daily `license` task also installs a newer hrs if one is out (see selfupdate.py).
 """
 import os
 import plistlib
@@ -219,6 +220,11 @@ def run(task, collector=None, now=None):
         result = {"state": info.get("state"), "methodology": info.get("methodology")}
         if info.get("warning"):
             result["notified"] = notify(PRODUCT_NAME, info["warning"])
+        from . import selfupdate
+        try:
+            result["self_update"] = selfupdate.start()
+        except Exception as exc:  # noqa: BLE001 - a failed update never stops the key check
+            result["self_update"] = {"error": str(exc)}
     elif task == "collect":
         from hrs_collector.service import Collector
         from hrshturman_local import collector_feed

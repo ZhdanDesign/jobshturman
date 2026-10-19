@@ -15,6 +15,7 @@
   hrs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
   hrs schedule run <task>              run one task now: license, collect, digest, reminders
   hrs schedule set <task> [--time HH:MM ...] [--on|--off]   when a task runs
+  hrs self-update [--check|--status]   install a newer hrs now (it also updates itself daily and after the agent closes)
 """
 import argparse
 import json
@@ -30,6 +31,11 @@ def _print(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
 
 
+def _version() -> str:
+    from .license import client_version
+    return client_version()
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["collect"]:
@@ -38,6 +44,7 @@ def main(argv=None) -> int:
         return collector_cli.main(["--data", str(paths.collector_dir()), "--candidate", s.candidate_id, *argv[1:]])
 
     ap = argparse.ArgumentParser(prog="hrs", description=f"{PRODUCT_NAME}: локальный помощник поиска работы для кодового агента")
+    ap.add_argument("--version", action="version", version=f"hrs {_version()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("serve", help="MCP-сервер для агента (stdio; --http для streamable HTTP на 127.0.0.1)")
     p.add_argument("--http", action="store_true")
@@ -51,6 +58,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("setup", help="подключить hrs к Claude Code и Codex и поставить навык")
     p.add_argument("--skill-dir", help="папка установочного навыка (с SKILL.md)")
     p.add_argument("--from-plugin", action="store_true", help="навык в Claude Code уже даёт плагин")
+    p = sub.add_parser("self-update", help="поставить новую версию hrs, если она вышла")
+    p.add_argument("--check", action="store_true", help="только проверить")
+    p.add_argument("--status", action="store_true", help="последнее обновление и проверка")
     p = sub.add_parser("login", help="ввести ключ доступа и скачать методику")
     p.add_argument("key")
     p.add_argument("--server", help=f"адрес сервера ключей (по умолчанию сервер {PRODUCT_NAME})")
@@ -155,8 +165,9 @@ def main(argv=None) -> int:
         from hrshturman_core import Store
         from hrshturman_core.workspace import create_candidate
 
-        from . import web
+        from . import selfupdate, web
         from .server import Methodology
+        selfupdate.hold()
         s = paths.settings()
         store = Store(s.db_path).init()
         create_candidate(store, s.candidate_id, s.timezone, actor="installer")
@@ -166,8 +177,15 @@ def main(argv=None) -> int:
             web.open_external(url)
         threading.Event().wait()
         return 0
+    if args.cmd == "self-update":
+        from . import selfupdate
+        _print(selfupdate.status() if args.status else selfupdate.check(force=True) if args.check
+               else selfupdate.start(force=True))
+        return 0
     if args.cmd == "serve":
+        from . import selfupdate
         from .server import build
+        selfupdate.hold()
         server = build()
         if args.http:
             server.run("streamable-http", host="127.0.0.1", port=args.port)

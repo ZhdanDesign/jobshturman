@@ -8,7 +8,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from hrshturman_core import schedule as schedule_core
 
-from . import docs, license, paths, schedule, web
+from . import docs, license, paths, schedule, selfupdate, web
 from .inproc import InProcessCollectorClient
 
 INSTRUCTIONS = (
@@ -17,7 +17,9 @@ INSTRUCTIONS = (
     "add_telegram_channel; сбор и перенос в карточки: vacancies_sync(run=true).\n- В начале работы вызови "
     "license_status. Если в ответе есть warning, перескажи его человеку со ссылкой на продление. Если "
     "methodology=false, процедуры этапов недоступны: объясни причину из message и не выдумывай методику. "
-    "Если есть hrs_update, перескажи его человеку и предложи обновить программу командой из него. "
+    "Программа hrs обновляется сама: раз в день и после того, как агент закрыт. Если есть hrs_updated, одной фразой "
+    "скажи человеку, что JobShturman обновился и что нового (из notes). Если есть hrs_update, скажи, что новая "
+    "методика заработает после обновления программы, оно пройдёт само после перезапуска агента. "
     "Если есть methodology_update, перескажи, что изменилось, и спроси «Обновить?»; только после «да» вызови "
     "methodology_update(accept=true), до этого работай по текущей версии. Если есть methodology_updated, один раз "
     "расскажи, что методика обновилась сама и что в ней изменилось, затем вызови methodology_update()."
@@ -207,7 +209,11 @@ def build(settings=None, collector: Collector | None = None):
     def license_status(refresh: bool = False) -> dict:
         """Ключ доступа к методике: тариф, срок, предупреждение о продлении, скачана ли методика.
         refresh=true — спросить сервер сейчас (например, после продления ключа)."""
-        return license.refresh(force=refresh)
+        out = license.refresh(force=refresh)
+        told = selfupdate.news()
+        if told:
+            selfupdate.mark_told()
+        return out | told
 
     @mcp.tool()
     def methodology_update(accept: bool = False) -> dict:
