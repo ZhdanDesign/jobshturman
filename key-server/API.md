@@ -11,6 +11,7 @@
 | `GET /v1/bundle/latest` | `Authorization: Bearer <token>` | zip методики; заголовки `X-Bundle-Version`, `X-Bundle-Sha256`, `X-Bundle-Signature` (Ed25519, base64, подпись всего zip) |
 | `POST /v1/bundle/accept` | `Authorization: Bearer <token>`, `{"version"}` | статус; человек согласился на предложенную версию, ключ переходит на неё, `hrs` скачивает её следующим запросом. `not_offered` 409, если эта версия сейчас не предлагается |
 | `GET /v1/health` | — | `{"ok": true}` |
+| `GET /v1/tariffs` | — | открытый список тарифов без токена: `id`, `title`, `price_rub_from`, `price_rub_to`, `months`, `device_limit`, `active`; его читает лендинг |
 
 Клиент передаёт свою версию в заголовке `X-Hrs-Version` (в `activate`, `status`, `bundle/latest`). Сервер отдаёт текущую версию методики канала ключа, если этот `hrs` её читает; иначе последнюю, которую он читает, и в статусе появляется `hrs_update` — текст с командой обновления. Запрос без заголовка считается запросом самого старого `hrs`.
 

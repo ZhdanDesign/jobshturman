@@ -144,6 +144,36 @@ if ("IntersectionObserver" in window) {
   apps.forEach(play);
 }
 
+// Тарифы берутся с сервера ключей: правка в админке доходит до лендинга без выкладки.
+// Если сервер не ответил, остаются цены из разметки.
+const plans = document.querySelectorAll("[data-tariff]");
+if (plans.length) {
+  const NBSP = "\u00a0";
+  const rub = (n) => n.toLocaleString("ru-RU").replace(/\s/g, NBSP) + NBSP + "₽";
+  const plural = (n, one, few, many) => {
+    const d = n % 10, dd = n % 100;
+    return d === 1 && dd !== 11 ? one : d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
+  };
+  fetch(new URL("keys/v1/tariffs", document.baseURI))
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((list) => {
+      const byId = Object.fromEntries(list.map((t) => [t.id, t]));
+      plans.forEach((card) => {
+        const t = byId[card.dataset.tariff];
+        if (!t) return;
+        if (!t.active) { card.hidden = true; return; }
+        const price = t.price_rub_to > t.price_rub_from ? "от" + NBSP + rub(t.price_rub_from) : rub(t.price_rub_from);
+        const term = t.months + NBSP + plural(t.months, "месяц", "месяца", "месяцев");
+        // «до 1 устройства», «до 2 устройств»
+        const devices = t.device_limit + NBSP + (t.device_limit % 10 === 1 && t.device_limit % 100 !== 11 ? "устройства" : "устройств");
+        card.querySelectorAll('[data-t="price"]').forEach((el) => { el.textContent = price; });
+        card.querySelectorAll('[data-t="term"]').forEach((el) => { el.textContent = term; });
+        card.querySelectorAll('[data-t="devices"]').forEach((el) => { el.textContent = devices; });
+      });
+    })
+    .catch(() => {});
+}
+
 // Кнопка «Скопировать».
 document.querySelectorAll(".copy").forEach((box) => {
   const button = box.querySelector(".copy-btn");

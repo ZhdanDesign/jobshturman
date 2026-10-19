@@ -162,6 +162,19 @@ def test_tariffs_are_editable(server):
     assert stats["keys"] == 0 and stats["latest_bundle"] is None
 
 
+
+def test_public_tariffs_follow_the_admin_without_a_token(server):
+    """The landing reads prices from here, so an edit in the admin reaches the page without a redeploy."""
+    server.patch("/v1/admin/tariffs/self", json={"price_rub_from": 19900, "price_rub_to": 19900, "months": 12}, headers=ADMIN)
+    server.patch("/v1/admin/tariffs/experts", json={"active": False}, headers=ADMIN)
+    r = server.get("/v1/tariffs")
+    assert r.status_code == 200 and "max-age" in r.headers["cache-control"]
+    tariffs = {t["id"]: t for t in r.json()}
+    assert tariffs["self"] == {"id": "self", "title": "Самостоятельно", "price_rub_from": 19900, "price_rub_to": 19900,
+                               "months": 12, "device_limit": 2, "active": True}
+    assert tariffs["experts"]["active"] is False
+    assert server.patch("/v1/admin/tariffs/self", json={"months": 1}).status_code == 401
+
 def test_each_key_has_its_own_watermark_and_a_copied_text_finds_it(server):
     first, second = issue(server), issue(server)
     assert first["watermark"] != second["watermark"] and len(first["watermark"]) == 8

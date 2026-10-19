@@ -138,6 +138,14 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
     def health():
         return {"ok": True}
 
+    # Public: the landing shows prices from here, so an admin edit reaches the page without a redeploy.
+    @app.get("/v1/tariffs")
+    def public_tariffs(response: Response):
+        response.headers["Cache-Control"] = "public, max-age=60"
+        return [{"id": t["id"], "title": t["title"], "price_rub_from": t["price_rub_from"],
+                 "price_rub_to": t["price_rub_to"], "months": t["months"], "device_limit": t["device_limit"],
+                 "active": bool(t["active"])} for t in ks.tariffs()]
+
     # --- admin ---
 
     a = [Depends(admin)]
