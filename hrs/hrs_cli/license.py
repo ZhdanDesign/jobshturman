@@ -1,4 +1,4 @@
-"""Access key and the methodology bundle: hrs login, hrs sync, key status for the agent.
+"""Access key and the methodology bundle: jbs login, jbs sync, key status for the agent.
 
 The key server sees only the key and a random installation id. The key itself is kept in the macOS
 Keychain (keystore.py), not in license.json; an old license.json with the key is moved there on read. The bundle is checked against
@@ -88,7 +88,7 @@ def decrypt(blob: bytes, state: dict) -> bytes:
     try:
         return _cipher(state).decrypt(blob[:12], blob[12:], None)
     except (InvalidTag, ValueError) as exc:
-        raise DomainError("bad_bundle", "Методика на диске не расшифровывается этим ключом: выполните hrs sync") from exc
+        raise DomainError("bad_bundle", "Методика на диске не расшифровывается этим ключом: выполните jbs sync") from exc
 
 
 def public_keys() -> list[str]:
@@ -227,7 +227,7 @@ def sync(state: dict | None = None, http: httpx.Client | None = None) -> dict:
     """Download the latest bundle if it changed and check its signature before keeping it."""
     state = state or load()
     if not state:
-        raise DomainError("no_license", "Ключ не введён: hrs login <ключ>")
+        raise DomainError("no_license", "Ключ не введён: jbs login <ключ>")
     with _network(state["server"]), _client(state["server"], http) as client:
         if not state.get("token") or parse(state["token_expires_at"]) <= now() + timedelta(minutes=5):
             _activate(state, client)
@@ -256,7 +256,7 @@ def update(accept: bool = False, http: httpx.Client | None = None) -> dict:
     (and mark an automatic update as told); with accept, move the key to the offered version and download it."""
     state = load()
     if not state:
-        raise DomainError("no_license", "Ключ не введён: hrs login <ключ>")
+        raise DomainError("no_license", "Ключ не введён: jbs login <ключ>")
     refresh(force=True, http=http)
     state = load()
     offer = (state.get("status") or {}).get("update_available")
@@ -285,7 +285,7 @@ def _changes(items: list[dict]) -> str:
 def verify(data: bytes, signature: str) -> None:
     keys = public_keys()
     if not keys:
-        raise DomainError("no_public_key", "В hrs не задан ключ проверки методики (HRS_BUNDLE_PUBKEYS)")
+        raise DomainError("no_public_key", "В программе не задан ключ проверки методики (HRS_BUNDLE_PUBKEYS)")
     try:
         sig = base64.b64decode(signature)
     except ValueError as exc:
@@ -304,7 +304,7 @@ def view() -> dict:
     state = load()
     if not state:
         return {"state": "none", "methodology": False,
-                "message": "Ключ не введён. Попросите у человека ключ из письма и выполните hrs login <ключ>."}
+                "message": "Ключ не введён. Попросите у человека ключ из письма и выполните jbs login <ключ>."}
     status = state.get("status") or {}
     renew = status.get("renew_url")
     store = keystore.store()
@@ -315,7 +315,7 @@ def view() -> dict:
     if not state.get("key"):
         return out | {"state": "none", "methodology": False,
                       "message": "Ключ не найден в хранилище ключей. Попросите у человека ключ из письма и "
-                                 "выполните hrs login <ключ>."}
+                                 "выполните jbs login <ключ>."}
     refused = state.get("refused")
     expires = parse(status["expires_at"]) if status.get("expires_at") else None
     if refused and refused["code"] == "key_revoked":
@@ -329,7 +329,7 @@ def view() -> dict:
     checked = parse(state["checked_at"]) if state.get("checked_at") else None
     if checked is None or now() - checked > OFFLINE_GRACE:
         return out | {"state": "offline", "methodology": False,
-                      "message": "Ключ давно не проверялся. Подключите интернет и выполните hrs sync."}
+                      "message": "Ключ давно не проверялся. Подключите интернет и выполните jbs sync."}
     has_bundle = bundle_file().is_file()
     out |= {"days_left": max((expires - now()).days, 0) if expires else None, "methodology": has_bundle}
     if status.get("hrs_update"):
@@ -338,14 +338,14 @@ def view() -> dict:
     if offer:
         out["methodology_update"] = offer | {
             "message": f"Вышла новая версия методики {offer['version']}. Что изменилось:\n{_changes(offer['changes'])}\n"
-                       "Обновить? После «да»: hrs update --yes (агенту: methodology_update с accept=true). "
+                       "Обновить? После «да»: jbs update --yes (агенту: methodology_update с accept=true). "
                        "До согласия работа идёт по текущей версии."}
     if news and state.get("news_seen") != news["to"]:
         out["methodology_updated"] = news | {
             "message": f"Методика обновлена до версии {news['to']} без вопроса: в ней важное исправление. "
                        f"Что изменилось:\n{_changes(news['changes'])}"}
     if not has_bundle:
-        out["message"] = "Методика не скачана: выполните hrs sync."
+        out["message"] = "Методика не скачана: выполните jbs sync."
     if expires and expires - now() <= WARN_BEFORE:
         return out | {"state": "expiring", "warning": f"Ключ действует до {status['expires_at'][:10]}. "
                                                       f"Продлите его, чтобы методика не отключилась: {renew}"}

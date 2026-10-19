@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hrshturman-local"
-version = "0.3.2"
+version = "0.3.3"
 description = "JobShturman local app: MCP server and local UI"
 requires-python = ">=3.12"
 # One mcp version for the whole hrs CLI: 2.x, same as collector/.

@@ -1,4 +1,4 @@
-"""hrs schedule: the system scheduler runs the deterministic tasks of hrs without the agent.
+"""jbs schedule: the system scheduler runs the deterministic tasks of hrs without the agent.
 
   macOS    LaunchAgents ~/Library/LaunchAgents/ru.owai.jobshturman.<task>.plist (a run missed in sleep
            happens on wake)

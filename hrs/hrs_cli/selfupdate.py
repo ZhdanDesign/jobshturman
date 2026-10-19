@@ -193,7 +193,7 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
         return info
     busy = update_runner.running(pids_dir(), exclude=os.getpid())
     if busy:
-        return info | {"pending": "hrs открыт у агента: обновлю, когда агент закроется"}
+        return info | {"pending": "JobShturman открыт у агента: обновлю, когда агент закроется"}
     try:
         job = prepare(info, http=http)
     except (httpx.HTTPError, OSError, RuntimeError, zipfile.BadZipFile, tarfile.TarError) as exc:

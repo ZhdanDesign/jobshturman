@@ -68,7 +68,7 @@ const escapeHTML = (value) => String(value).replace(/[&<>"']/g, (char) => ({ "&"
 const date = (value) => value ? new Date(value).toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" }).replace(/\s?г\.$/, "") : "—";
 const dateTime = (value) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 const tariffTitle = (id) => data.tariffs.find((tariff) => tariff.id === id)?.title || id;
-const keyLabel = (key) => `HRS-${key.key_hint}…`;
+const keyLabel = (key) => `JBS-${key.key_hint}…`;
 const rub = (value) => `${Number(value).toLocaleString("ru-RU")} ₽`;
 const priceOf = (tariff) => tariff.price_rub_from === tariff.price_rub_to ? rub(tariff.price_rub_from) : `${rub(tariff.price_rub_from)}–${rub(tariff.price_rub_to)}`;
 const months = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? "месяц" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "месяца" : "месяцев"}`;

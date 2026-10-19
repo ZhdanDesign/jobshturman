@@ -84,7 +84,7 @@ test("API ищется относительно /jobshturman/_/admin/ и пол�
   await settle();
   assert.deepEqual(app.calls.map((call) => call.url.split("/admin")[1]).sort(), ["/keys", "/stats", "/tariffs", "/whoami"]);
   assert.ok(app.calls.every((call) => call.headers.Authorization === "Bearer t-123" && call.method === "GET"));
-  assert.match(app.element("key-rows").innerHTML, /HRS-QW7K…/);
+  assert.match(app.element("key-rows").innerHTML, /JBS-QW7K…/);
   assert.match(app.element("key-rows").innerHTML, /Заблокирован/);
   assert.equal(app.element("nav-count").textContent, 2);
 });
@@ -141,7 +141,7 @@ test("поиск и фильтр тарифа — на месте, фильтр 
 });
 
 test("выдача шлёт тариф, срок, лимит и номер заказа; полный ключ виден один раз", async () => {
-  const issued = { ...KEY, id: "ffff00001111", key: "HRS-QW7K-AAAA-BBBB-CCCC-DDDD", devices: [] };
+  const issued = { ...KEY, id: "ffff00001111", key: "JBS-QW7K-AAAA-BBBB-CCCC-DDDD", devices: [] };
   const app = load({ token: "t", routes: { ...api, "POST /keys": () => [201, { ...issued }] } });
   await settle();
   await submitDialog(app, "issue-form", { tariff: "self", term: "6", until: "", deviceLimit: "1", order: " TEST-PAID-001 " });

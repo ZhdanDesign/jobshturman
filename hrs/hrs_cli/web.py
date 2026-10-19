@@ -129,7 +129,7 @@ def confirm(store, cid, expected_version, actor="candidate", route=None):
 # --- the local web server ---
 
 class WebUI:
-    """Started on first use inside `hrs serve` (a daemon thread) or by `hrs ui`."""
+    """Started on first use inside `jbs serve` (a daemon thread) or by `jbs ui`."""
 
     def __init__(self, store, cid, library=None):
         self.store, self.cid, self.library = store, cid, library

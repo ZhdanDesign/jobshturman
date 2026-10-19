@@ -100,8 +100,16 @@ def add_months(dt: datetime, months: int) -> datetime:
     raise AssertionError("unreachable")
 
 
+KEY_PREFIX = "JBS"
+OLD_KEY_PREFIXES = ("HRS",)  # keys issued before the rename stay valid
+
+
 def normalize_key(key: str) -> str:
-    return "".join(ch for ch in key.upper() if ch.isalnum()).removeprefix("HRS")
+    """The 20 characters of the key, without the prefix: JBS-… and the old HRS-… hash alike."""
+    plain = "".join(ch for ch in key.upper() if ch.isalnum())
+    if len(plain) == 23 and plain[:3] in (KEY_PREFIX, *OLD_KEY_PREFIXES):
+        return plain[3:]
+    return plain
 
 
 def b64(data: bytes) -> str:
@@ -161,7 +169,7 @@ class KeyServer:
     def _read_token(self, token: str) -> dict:
         body, _, sig = (token or "").partition(".")
         if not body or not hmac.compare_digest(sig, self._hash("token", body)):
-            raise KeyServerError("invalid_token", "Токен не подходит: войдите заново через hrs login", 401)
+            raise KeyServerError("invalid_token", "Токен не подходит: войдите заново через jbs login", 401)
         data = json.loads(unb64(body))
         if data["exp"] < time.time():
             raise KeyServerError("token_expired", "Токен устарел: hrs обновит его сам", 401)
@@ -266,7 +274,7 @@ class KeyServer:
         row = c.execute("SELECT * FROM keys WHERE id = ?", (data["k"],)).fetchone()
         seen = c.execute("SELECT 1 FROM activations WHERE key_id = ? AND install_hash = ?", (data["k"], data["i"])).fetchone()
         if row is None or seen is None:
-            raise KeyServerError("invalid_token", "Токен не подходит: войдите заново через hrs login", 401)
+            raise KeyServerError("invalid_token", "Токен не подходит: войдите заново через jbs login", 401)
         return row, data["i"]
 
     # --- public API ---
@@ -324,7 +332,7 @@ class KeyServer:
             offered, _ = self._pick(c, row["channel"], client)
             if offered is None or offered["version"] != version:
                 raise KeyServerError("not_offered", "Эта версия методики сейчас не предлагается: проверьте ключ "
-                                     "ещё раз (hrs sync)", 409)
+                                     "ещё раз (jbs sync)", 409)
             self._pin(c, row["id"], version)
             self._log(c, row["id"], "check", f"accept {version}")
             row = c.execute("SELECT * FROM keys WHERE id = ?", (row["id"],)).fetchone()
@@ -353,7 +361,7 @@ class KeyServer:
               order_ref: str | None = None, device_limit: int | None = None) -> dict:
         """New key. The plain key is returned only here; the server keeps its hash."""
         raw = "".join(secrets.choice(KEY_ALPHABET) for _ in range(20))
-        key = "HRS-" + "-".join(raw[i:i + 4] for i in range(0, 20, 4))
+        key = f"{KEY_PREFIX}-" + "-".join(raw[i:i + 4] for i in range(0, 20, 4))
         with self._tx() as c:
             tariff = c.execute("SELECT * FROM tariffs WHERE id = ? AND active = 1", (tariff_id,)).fetchone()
             if tariff is None:

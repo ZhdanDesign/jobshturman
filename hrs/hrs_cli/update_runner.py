@@ -68,7 +68,7 @@ def apply(job: dict, run=_run) -> dict:
               "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     busy = running(Path(job["pids"]))
     if busy:
-        return result | {"ok": False, "error": "busy", "message": "hrs ещё работает у агента; обновлю, когда он закроется"}
+        return result | {"ok": False, "error": "busy", "message": "JobShturman ещё работает у агента; обновлю, когда он закроется"}
     code, log = _install(job, job["wheels"], job["to"], run)
     if code == 0:
         code, log = run([job["hrs"], "--version"], timeout=120)

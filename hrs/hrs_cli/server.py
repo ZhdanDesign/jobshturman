@@ -20,7 +20,7 @@ INSTRUCTIONS = (
     "add_telegram_channel; сбор и перенос в карточки: vacancies_sync(run=true).\n- В начале работы вызови "
     "license_status. Если в ответе есть warning, перескажи его человеку со ссылкой на продление. Если "
     "methodology=false, процедуры этапов недоступны: объясни причину из message и не выдумывай методику. "
-    "Программа hrs обновляется сама: раз в день и после того, как агент закрыт. Если есть hrs_updated, одной фразой "
+    "Программа JobShturman обновляется сама: раз в день и после того, как агент закрыт. Если есть hrs_updated, одной фразой "
     "скажи человеку, что JobShturman обновился и что нового (из notes). Если есть hrs_update, скажи, что новая "
     "методика заработает после обновления программы, оно пройдёт само после перезапуска агента. "
     "Если есть methodology_update, перескажи, что изменилось, и спроси «Обновить?»; только после «да» вызови "
@@ -32,7 +32,7 @@ INSTRUCTIONS = (
     "появится в чате; иначе задавай вопросы как обычно. builtin_browser: ui_open, затем открой url своим встроенным "
     "браузером (Browser pane Claude Code, браузер приложения Codex). external_browser: ui_open(external=true). "
     "Ответы со страницы сразу лежат в базе: читай их через intake_get, не переспрашивай."
-    "\n- Регулярные задачи hrs (без агента): schedule_status, schedule_set, schedule_install. Сводка — digest_get, "
+    "\n- Регулярные задачи программы (без агента): schedule_status, schedule_set, schedule_install. Сводка — digest_get, "
     "напоминания — reminders_list. Свои задачи по расписанию регистрируй через schedule_register."
     "\n- Справка о продукте — product_help: отвечай по ней, когда человек спрашивает, как работать с JobShturman."
 )
@@ -84,7 +84,7 @@ def build(settings=None, collector: Collector | None = None):
 
     @mcp.tool()
     def license_login(key: str) -> dict:
-        """Ввести ключ доступа из письма (HRS-XXXX-...): активировать его на этом компьютере и скачать методику.
+        """Ввести ключ доступа из письма (JBS-XXXX-…, старые HRS-… тоже): активировать его на этом компьютере и скачать методику.
         Ключ не повторяй в ответах и не сохраняй в файлы."""
         try:
             return license.login(key)
@@ -160,7 +160,7 @@ def build(settings=None, collector: Collector | None = None):
 
     @mcp.tool()
     def schedule_set(task: str, times: list[str] | None = None, enabled: bool | None = None) -> dict:
-        """Изменить время задачи hrs (times: ["HH:MM", ...], время компьютера) или включить/выключить её.
+        """Изменить время задачи программы (times: ["HH:MM", ...], время компьютера) или включить/выключить её.
         Только по слову человека. Если задачи уже стоят в планировщике, затем вызови schedule_install."""
         def go():
             schedule_core.set_task(store, cid, task, times, enabled)
@@ -175,7 +175,7 @@ def build(settings=None, collector: Collector | None = None):
 
     @mcp.tool()
     def schedule_remove() -> dict:
-        """Убрать все задачи hrs из системного планировщика. Данные и настройки остаются."""
+        """Убрать все задачи программы из системного планировщика. Данные и настройки остаются."""
         return domain(schedule.remove)
 
     @mcp.tool()

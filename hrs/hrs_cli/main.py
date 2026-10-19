@@ -1,21 +1,21 @@
 """hrs command line.
 
-  hrs serve [--http --port 8742]   MCP server for Claude Code, Codex and other agents (stdio by default)
-  hrs collect <command> ...        vacancy collector: sources, runs, vacancies (see `hrs collect --help`)
-  hrs doc import <file>            read a PDF or Word file into the local workspace
-  hrs paths                        where hrs keeps its data
-  hrs setup [--skill-dir DIR]      connect hrs to Claude Code and Codex, install the skill
-  hrs login <key> [--server URL]   enter the access key and download the methodology
-  hrs sync                         check the key and download a newer methodology
-  hrs license                      key state: tariff, end date, renewal link
-  hrs update [--yes]               what changed in a newer methodology; --yes installs it (only with the person's consent)
-  hrs stage <n>                    procedure of one methodology stage (number or id), never the whole bundle
-  hrs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
-  hrs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
-  hrs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
-  hrs schedule run <task>              run one task now: license, collect, digest, reminders
-  hrs schedule set <task> [--time HH:MM ...] [--on|--off]   when a task runs
-  hrs self-update [--check|--status]   install a newer hrs now (it also updates itself daily and after the agent closes)
+  jbs serve [--http --port 8742]   MCP server for Claude Code, Codex and other agents (stdio by default)
+  jbs collect <command> ...        vacancy collector: sources, runs, vacancies (see `jbs collect --help`)
+  jbs doc import <file>            read a PDF or Word file into the local workspace
+  jbs paths                        where hrs keeps its data
+  jbs setup [--skill-dir DIR]      connect hrs to Claude Code and Codex, install the skill
+  jbs login <key> [--server URL]   enter the access key and download the methodology
+  jbs sync                         check the key and download a newer methodology
+  jbs license                      key state: tariff, end date, renewal link
+  jbs update [--yes]               what changed in a newer methodology; --yes installs it (only with the person's consent)
+  jbs stage <n>                    procedure of one methodology stage (number or id), never the whole bundle
+  jbs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
+  jbs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
+  jbs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
+  jbs schedule run <task>              run one task now: license, collect, digest, reminders
+  jbs schedule set <task> [--time HH:MM ...] [--on|--off]   when a task runs
+  jbs self-update [--check|--status]   install a newer hrs now (it also updates itself daily and after the agent closes)
 """
 import argparse
 import json
@@ -43,22 +43,22 @@ def main(argv=None) -> int:
         s = paths.settings()
         return collector_cli.main(["--data", str(paths.collector_dir()), "--candidate", s.candidate_id, *argv[1:]])
 
-    ap = argparse.ArgumentParser(prog="hrs", description=f"{PRODUCT_NAME}: локальный помощник поиска работы для кодового агента")
-    ap.add_argument("--version", action="version", version=f"hrs {_version()}")
+    ap = argparse.ArgumentParser(prog="jbs", description=f"{PRODUCT_NAME}: локальный помощник поиска работы для кодового агента")
+    ap.add_argument("--version", action="version", version=f"jbs {_version()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("serve", help="MCP-сервер для агента (stdio; --http для streamable HTTP на 127.0.0.1)")
     p.add_argument("--http", action="store_true")
     p.add_argument("--port", type=int, default=8742)
-    sub.add_parser("collect", help="сборщик вакансий: hrs collect --help")
+    sub.add_parser("collect", help="сборщик вакансий: jbs collect --help")
     p = sub.add_parser("doc", help="документы кандидата")
     dsub = p.add_subparsers(dest="doc_cmd", required=True)
     p = dsub.add_parser("import", help="прочитать PDF/Word в Markdown и сохранить локально")
     p.add_argument("file")
     sub.add_parser("paths", help="где лежат данные")
-    p = sub.add_parser("setup", help="подключить hrs к Claude Code и Codex и поставить навык")
+    p = sub.add_parser("setup", help="подключить JobShturman к Claude Code и Codex и поставить навык")
     p.add_argument("--skill-dir", help="папка установочного навыка (с SKILL.md)")
     p.add_argument("--from-plugin", action="store_true", help="навык в Claude Code уже даёт плагин")
-    p = sub.add_parser("self-update", help="поставить новую версию hrs, если она вышла")
+    p = sub.add_parser("self-update", help="поставить новую версию программы, если она вышла")
     p.add_argument("--check", action="store_true", help="только проверить")
     p.add_argument("--status", action="store_true", help="последнее обновление и проверка")
     p = sub.add_parser("login", help="ввести ключ доступа и скачать методику")

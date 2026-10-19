@@ -18,7 +18,7 @@ $SkillDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $FromPlugin = @()
 if ($SkillDir -match '[\\/]\.claude[\\/]plugins[\\/]') { $FromPlugin = @('--from-plugin') }
 
-function Say($msg) { [Console]::Error.WriteLine("hrs-bootstrap: $msg") }
+function Say($msg) { [Console]::Error.WriteLine("JobShturman: $msg") }
 function Fail($msg) { Say $msg; exit 1 }
 function Run {
     # Native tools report progress on stderr; only the exit code means failure.
@@ -58,7 +58,7 @@ try {
             $Source = $zip
         }
         if (Test-Path (Join-Path $Source 'hrs\pyproject.toml')) {
-            Say "ставлю hrs из папки проекта $Source"
+            Say "ставлю программу из папки проекта $Source"
             Run uv tool install --force --python 3.12 --editable (Join-Path $Source 'hrs')
         } elseif (Test-Path $Source -PathType Container) {
             Install-Wheels $Source

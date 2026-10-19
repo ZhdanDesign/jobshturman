@@ -67,7 +67,7 @@ def publish(client, library):
 def test_active_key_downloads_a_signed_bundle_without_acceptance_files(server, library):
     publish(server, library)
     key = issue(server, order_ref="T-1001")
-    assert key["key"].startswith("HRS-") and key["state"] == "active"
+    assert key["key"].startswith("JBS-") and key["state"] == "active"
     r = activate(server, key["key"].lower().replace("-", " "))  # typed loosely, still found
     assert r.status_code == 200, r.text
     status = r.json()
@@ -232,3 +232,11 @@ def test_several_admin_tokens_each_revocable(tmp_path):
     revoked = TestClient(create_app(Settings(data=tmp_path / "data", secret=b"s" * 40, admin_token="owner-token",
                                              signing_key=tmp_path / "data" / "signing.pem", renew_url="x")))
     assert revoked.get("/v1/admin/stats", headers={"Authorization": "Bearer second-token"}).status_code == 403
+
+
+def test_keys_from_before_the_rename_still_work(server, library):
+    """Letters already sent carry HRS-…: the same 20 characters with the old prefix are the same key."""
+    publish(server, library)
+    key = issue(server)["key"]
+    assert activate(server, "HRS-" + key[4:]).status_code == 200
+    assert activate(server, key[4:]).status_code == 200  # typed without the prefix

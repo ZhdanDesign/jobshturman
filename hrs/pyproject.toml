@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hrshturman"
-version = "0.6.1"
+version = "0.7.0"
 description = "JobShturman CLI: local MCP server, vacancy collector and document import for coding agents"
 requires-python = ">=3.12"
 dependencies = [
     "hrshturman-core>=0.3.0",
-    "hrshturman-local>=0.3.2",
+    "hrshturman-local>=0.3.3",
     "hrs-collector>=0.2.1",
     "mcp>=2.3,<3",
     "markitdown[docx,pdf]>=0.1",
@@ -22,6 +22,8 @@ dependencies = [
 dev = ["hrs-keys"]
 
 [project.scripts]
+jbs = "hrs_cli.main:main"
+# The old name stays: installed agents, schedules and self-update call hrs.
 hrs = "hrs_cli.main:main"
 
 [tool.setuptools]

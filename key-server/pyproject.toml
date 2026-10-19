@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hrs-keys"
-version = "0.1.1"
+version = "0.1.2"
 description = "JobShturman key server: keys, tariffs, activations and the signed methodology bundle. No personal data."
 requires-python = ">=3.12"
 dependencies = [

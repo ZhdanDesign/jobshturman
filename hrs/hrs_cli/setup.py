@@ -35,6 +35,10 @@ def hrs_command() -> str:
     me = Path(sys.argv[0])
     if me.name.lower() in ("hrs", "hrs.exe") and me.is_file():
         return str(me.absolute())
+    if me.name.lower() in ("jbs", "jbs.exe") and me.is_file():  # agents keep the old name: same program
+        twin = me.with_name(me.name.lower().replace("jbs", "hrs"))
+        if twin.is_file():
+            return str(twin.absolute())
     return shutil.which("hrs") or str(me.absolute())
 
 
@@ -106,7 +110,7 @@ def setup_browser() -> list[dict]:
     server = browser_server()
     if server is None:
         return [{"agent": "browser", "status": "needs_node",
-                 "message": "Нет Node.js: агент не сможет откликаться через браузер. Поставьте Node.js LTS и повторите hrs setup"}]
+                 "message": "Нет Node.js: агент не сможет откликаться через браузер. Поставьте Node.js LTS и повторите jbs setup"}]
     command, args = server
     return [setup_claude(command, name=BROWSER, args=args), setup_codex(command, name=BROWSER, args=args)]
 

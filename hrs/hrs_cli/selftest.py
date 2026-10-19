@@ -5,7 +5,7 @@ stage_procedure tool; with the watermark stripped the text equals the source byt
 YAML front matter, code blocks and table rows are untouched; every file a stage links to is in the
 bundle (links in the shared files are checked too); no stage carries another stage's own text. For the bundle as a whole: nothing that must
 stay with us (acceptance scenarios, library tests) got in. Tool names the texts mention are matched
-against the tools of `hrs serve`.
+against the tools of `jbs serve`.
 
 Errors are faults of the delivery (ours). Findings are about the library texts: hrs reports them and
 never edits the methodology.
@@ -188,7 +188,7 @@ def installed_bundle() -> bytes:
     from . import license
     state = license.load()
     if not state or not license.bundle_file().is_file():
-        raise DomainError("no_bundle", "Методика не скачана: hrs login <ключ> или hrs selftest --library <папка>")
+        raise DomainError("no_bundle", "Методика не скачана: jbs login <ключ> или jbs selftest --library <папка>")
     data = license.decrypt(license.bundle_file().read_bytes(), state)
     license.verify(data, state["bundle"]["signature"])
     return data
@@ -205,7 +205,7 @@ def library_bundle(library, extra: dict | None = None) -> bytes:
 
 
 def tool_names() -> set[str]:
-    """Tools of `hrs serve`, built on a throwaway workspace so the check leaves no data behind."""
+    """Tools of `jbs serve`, built on a throwaway workspace so the check leaves no data behind."""
     import asyncio
     import dataclasses
     import tempfile
@@ -230,5 +230,5 @@ def summary(report: dict) -> str:
         return "общий файл" if item["stage"] is None else f"этап {item['stage']}"
     lines += [f"  ошибка: {where(e)}: {e['code']}: {e['detail']}" for e in report["errors"]]
     lines += [f"  замечание: {where(f)}: {f['code']}: {f['detail']}" for f in report["findings"]]
-    lines.append(f"Инструменты hrs, которые тексты этапов не упоминают: {len(report['tools_never_mentioned'])}.")
+    lines.append(f"Инструменты программы, которые тексты этапов не упоминают: {len(report['tools_never_mentioned'])}.")
     return "\n".join(lines)

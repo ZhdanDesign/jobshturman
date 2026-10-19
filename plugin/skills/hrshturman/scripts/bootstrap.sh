@@ -20,7 +20,7 @@ DEFAULT_SOURCE="https://github.com/ZhdanDesign/jobshturman/releases/latest/downl
 FROM_PLUGIN=""
 case "$SKILL_DIR" in */.claude/plugins/*) FROM_PLUGIN="--from-plugin" ;; esac
 
-say() { printf '%s\n' "hrs-bootstrap: $*" >&2; }
+say() { printf '%s\n' "JobShturman: $*" >&2; }
 fail() { say "$*"; exit 1; }
 
 export PATH="$HOME/.local/bin:$PATH"
@@ -50,7 +50,7 @@ if [ -n "$SOURCE" ]; then
       SOURCE="$WORK/hrs.zip" ;;
   esac
   if [ -f "$SOURCE/hrs/pyproject.toml" ]; then
-    say "ставлю hrs из папки проекта $SOURCE"
+    say "ставлю программу из папки проекта $SOURCE"
     uv tool install --force --python 3.12 --editable "$SOURCE/hrs" >&2
   elif [ -d "$SOURCE" ]; then
     install_wheels "$SOURCE"

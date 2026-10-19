@@ -236,7 +236,7 @@ wheels = [
 
 [[package]]
 name = "hrs-keys"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -271,7 +271,7 @@ dev = [
 
 [[package]]
 name = "hrshturman-core"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "../core" }
 
 [[package]]
