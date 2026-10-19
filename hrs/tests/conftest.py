@@ -20,3 +20,10 @@ def _file_keystore(monkeypatch):
     monkeypatch.delenv("HRS_KEYCHAIN", raising=False)
     # Never the production key server: anything not given a test client fails locally.
     monkeypatch.setenv("HRS_KEY_SERVER", "http://127.0.0.1:9")
+
+
+@pytest.fixture(autouse=True)
+def _stages_open(monkeypatch):
+    """Tests of the bundle read any stage; the stage gate has its own tests (test_stage_gate.py)."""
+    from hrs_cli import license
+    monkeypatch.setattr(license, "GATED", False)

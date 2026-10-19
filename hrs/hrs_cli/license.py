@@ -4,7 +4,8 @@ The key server sees only the key and a random installation id. The key itself is
 Keychain (keystore.py), not in license.json; an old license.json with the key is moved there on read. The bundle is checked against
 the signing key built into hrs. On disk it is kept only encrypted (AES-256-GCM, the key derived
 with HKDF from the access key and the installation id); it is decrypted in memory, one stage at a
-time is handed out, and every text carries the invisible watermark of the key.
+time is handed out, and every text carries the invisible watermark of the key. Stages open one by one in
+order, at most NEW_STAGES_PER_DAY new ones a day; other texts of the bundle are not handed out at all.
 The server is asked at most once a day; without network the last answer holds for 7 days,
 but never past the key's end date.
 """
@@ -40,6 +41,12 @@ CHECK_EVERY = timedelta(hours=24)
 OFFLINE_GRACE = timedelta(days=7)
 WARN_BEFORE = timedelta(days=1)
 TIMEOUT = 15.0
+# The methodology is licensed for working with the candidate, not for copying: a stage text is given only
+# for a stage already opened, the next one after it, or one the candidate has reached; new stages at most
+# this many a day. Of the other Markdown texts only these are given out.
+GATED = True
+NEW_STAGES_PER_DAY = 3
+OPEN_TEXTS = ("agent/genesis.md", "references/runtime_constraints.md")
 
 
 def now() -> datetime:
@@ -349,6 +356,9 @@ class BundleLibrary:
     """The methodology as the MCP server reads it: decrypted in memory, only while the key is valid.
     Every Markdown text it gives out carries the watermark of the key."""
 
+    def __init__(self, reached=None):
+        self.reached = reached  # () -> the furthest stage number the candidate's own data shows, or -1
+
     def _zip(self) -> zipfile.ZipFile:
         refresh()
         state = view()
@@ -363,11 +373,53 @@ class BundleLibrary:
         with self._zip() as z:
             return z.namelist()
 
+    def _gate(self, z: zipfile.ZipFile, name: str) -> None:
+        """Let a Markdown text out only if it is the main prompt, a common constraint or a stage the
+        candidate is allowed to open now; opening a new stage is remembered."""
+        if not GATED or not name.endswith(".md") or name in OPEN_TEXTS:
+            return
+        from hrshturman_core import methodology
+        route = methodology.route(_ZipLibrary(z))
+        stage = next((s for s in route.stages if name.startswith(s.dir + "/")), None)
+        if stage is None:
+            raise DomainError("locked", "Этот текст методики не выдаётся: методика лицензирована для работы с "
+                                        "кандидатом по этапам (stage_procedure), не для копирования")
+        state = self.state  # self.reached() below reads the bundle again and replaces self.state
+        opened = state.setdefault("opened", {})  # by a hash of the stage folder: no methodology names on disk
+        mark = hashlib.sha256(stage.dir.encode()).hexdigest()[:16]
+        if mark in opened:
+            return
+        numbers = {hashlib.sha256(s.dir.encode()).hexdigest()[:16]: s.number for s in route.stages}
+        furthest = max([numbers.get(d, -1) for d in opened] + [self.reached() if self.reached else -1])
+        if stage.number > furthest + 1:
+            raise DomainError("stage_locked", f"Этап {stage.number} ещё не открыт. Методика выдаётся по одному этапу "
+                                              f"по порядку: сейчас доступен этап {furthest + 1}.")
+        day_ago = now() - timedelta(days=1)
+        if sum(parse(at) > day_ago for at in opened.values()) >= NEW_STAGES_PER_DAY:
+            raise DomainError("stage_limit", f"За сутки открыто {NEW_STAGES_PER_DAY} новых этапа, следующий откроется "
+                                             "позже. Продолжайте текущий этап.")
+        opened[mark] = iso(now())
+        save(state)
+
     def read(self, name: str) -> str:
         with self._zip() as z:
+            self._gate(z, name)
             try:
                 text = z.read(name).decode("utf-8")
             except KeyError as exc:
                 raise DomainError("not_found", f"В методике нет {name}") from exc
         wm = (self.state.get("status") or {}).get("watermark")
         return watermark.mark(text, wm) if wm and name.endswith(".md") else text  # data files stay parseable
+
+
+class _ZipLibrary:
+    """The open bundle as methodology.route reads it, without the stage gate."""
+
+    def __init__(self, z: zipfile.ZipFile):
+        self.z = z
+
+    def names(self):
+        return self.z.namelist()
+
+    def read(self, name):
+        return self.z.read(name).decode("utf-8")

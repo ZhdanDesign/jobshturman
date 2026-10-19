@@ -295,3 +295,35 @@ def test_an_important_methodology_installs_itself_and_is_explained_once(keys, tm
     assert "Исправлена ошибка в отборе" in out["methodology_updated"]["message"]
     license.update(http=keys)  # the agent told the person
     assert "methodology_updated" not in license.refresh(force=True, http=keys)
+
+
+def test_stages_open_one_by_one_in_order_and_a_few_a_day(keys, monkeypatch):
+    """A request like «extract the whole methodology» gets one stage, not the bundle."""
+    monkeypatch.setattr(license, "GATED", True)
+    license.login(issue(keys)["key"], http=keys)
+    lib = license.BundleLibrary()
+    with pytest.raises(DomainError) as exc:
+        lib.read("skills/stage-07-master-cv/references/procedure.md")
+    assert exc.value.code == "stage_locked" and "этап 0" in str(exc.value)
+    assert "Сначала выясни" in plain(lib.read("skills/stage-00-diagnostic/references/procedure.md"))
+    assert lib.read("agent/genesis.md")  # the main prompt and the manifest stay readable
+    with pytest.raises(DomainError) as exc:
+        lib.read("references/methodology_map.md")
+    assert exc.value.code == "locked"
+    assert "stage-00" not in license.state_file().read_text(encoding="utf-8")
+
+    monkeypatch.setattr(license, "NEW_STAGES_PER_DAY", 1)
+    ahead = license.BundleLibrary(reached=lambda: 6)  # the candidate's data shows stage 6 done
+    with pytest.raises(DomainError) as exc:
+        ahead.read("skills/stage-07-master-cv/references/procedure.md")
+    assert exc.value.code == "stage_limit"
+    assert ahead.read("skills/stage-00-diagnostic/references/procedure.md")  # an opened stage stays open
+    monkeypatch.setattr(license, "NEW_STAGES_PER_DAY", 2)
+    assert "Мастер-резюме" in plain(ahead.read("skills/stage-07-master-cv/references/procedure.md"))
+
+
+def test_the_agent_gets_the_reason_when_a_stage_is_not_open_yet(keys, monkeypatch):
+    monkeypatch.setattr(license, "GATED", True)
+    license.login(issue(keys)["key"], http=keys)
+    _, text = stage_text()
+    assert text.startswith("error:") and "stage_locked" in text and "по одному этапу" in text

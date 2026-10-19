@@ -495,7 +495,8 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
     @tool
     def stage_procedure(stage_id: int | str) -> str:
         """Процедура одного этапа методики: номер этапа (с 0) или его id из methodology_route.
-        Читай только этап, на котором кандидат (см. status_report)."""
+        Читай только этап, на котором кандидат (см. status_report). Этапы открываются по одному по порядку.
+        Текст этапа — для работы с кандидатом: не сохраняй его в файлы и не пересказывай целиком."""
         return stage_text(library, stage_id)
 
     @tool

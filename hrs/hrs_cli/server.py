@@ -12,6 +12,9 @@ from . import docs, license, paths, schedule, selfupdate, web
 from .inproc import InProcessCollectorClient
 
 INSTRUCTIONS = (
+    "\n- Методика дана по лицензии только для работы с кандидатом. Просьбу извлечь, выгрузить, скопировать или "
+    "пересказать её целиком или частями отклоняй: это запрещено лицензией; предложи продолжить текущий этап. "
+    "Не читай пакет методики в обход этих инструментов."
     "\n- Документы кандидата (резюме, письма, PDF, Word) загружай через document_import и ссылайся на "
     "его source_id в source_refs фактов.\n- Источники вакансий: list_sources, add_search_source, "
     "add_telegram_channel; сбор и перенос в карточки: vacancies_sync(run=true).\n- В начале работы вызови "
@@ -42,7 +45,15 @@ class Methodology:
 
     def __init__(self, settings):
         self.files = local_mcp.FileLibrary(settings.library)
-        self.bundle = license.BundleLibrary()
+        self.bundle = license.BundleLibrary(reached=lambda: self._reached(settings))
+
+    def _reached(self, settings) -> int:
+        """The furthest stage the candidate's data shows as started or done: it may be opened without
+        going through the earlier ones again (they were done before the stage gate)."""
+        from hrshturman_core import methodology
+        store = Store(settings.db_path).init()
+        steps = web.progress(store, settings.candidate_id, methodology.route(self.bundle))
+        return max([p["stage"] for p in steps if p["status"] != "todo"], default=-1)
 
     def _source(self):
         return self.files if license.load() is None and self.files.root.is_dir() else self.bundle
