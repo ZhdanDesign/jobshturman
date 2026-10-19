@@ -147,7 +147,7 @@ class CollectorFeedTests(unittest.TestCase):
         collector_feed.sync(self.store, "me", self.client)
         status = report.status(self.store, "me")
         self.assertTrue(status["coverage"]["complete"])
-        self.assertEqual(len(status["limitations"]), 1)
+        self.assertEqual(status["limitations"], [])
 
     def test_errors_are_named(self):
         bad = collector_feed.CollectorClient(self.fake.url, "me", "wrong")

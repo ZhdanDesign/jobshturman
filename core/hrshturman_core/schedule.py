@@ -26,6 +26,8 @@ DEFAULTS = {
     "quiet_hours": {"from": "21:00", "to": "09:00"},
     "max_per_day": 3,
     "agent_tasks": [],
+    # Automatic applications: the person switches them on once; only vacancies ranked min_rank+ go out.
+    "auto_apply": {"enabled": False, "min_rank": 4, "daily_limit": 40, "changed_at": None},
     "last_runs": {},
     "shown_log": [],  # when notifications were shown, for the daily limit
 }
@@ -47,15 +49,16 @@ def get_settings(store, candidate_id):
     with store.read() as tx:
         get_candidate(tx, candidate_id)
         obj = tx.find("schedule", candidate_id, "settings")
-    data = {k: obj[k] for k in DEFAULTS} if obj else {}
-    return {**DEFAULTS, **data, "tasks": {**DEFAULTS["tasks"], **data.get("tasks", {})}}
+    data = {k: obj[k] for k in DEFAULTS if k in obj} if obj else {}
+    return {**DEFAULTS, **data, "tasks": {**DEFAULTS["tasks"], **data.get("tasks", {})},
+            "auto_apply": {**DEFAULTS["auto_apply"], **data.get("auto_apply", {})}}
 
 
 def _save(store, candidate_id, change, actor, event):
     with store.transaction(actor) as tx:
         get_candidate(tx, candidate_id)
         obj = tx.find("schedule", candidate_id, "settings")
-        current = {**DEFAULTS, **({k: obj[k] for k in DEFAULTS} if obj else {})}
+        current = {**DEFAULTS, **({k: obj[k] for k in DEFAULTS if k in obj} if obj else {})}
         data = change(current)
         if obj is None:
             tx.insert("schedule", candidate_id, data, "sched", natural_key="settings")
@@ -83,6 +86,28 @@ def set_task(store, candidate_id, task, times=None, enabled=None, actor="candida
             entry["enabled"] = bool(enabled)
         return dict(data, tasks={**tasks, task: entry})
     return _save(store, candidate_id, change, actor, "schedule_changed")
+
+
+AUTO_APPLY_MAX_PER_DAY = 40
+
+
+def set_auto_apply(store, candidate_id, enabled, min_rank=None, daily_limit=None, actor="candidate_via_agent"):
+    """Switch automatic applications on or off. Only at the person's explicit word: it is their standing
+    permission to apply without asking about each vacancy. The person starts each batch in a conversation;
+    nothing scheduled sends applications. hrs keeps the rank threshold, the daily limit and the pause."""
+    if min_rank is not None and min_rank not in (4, 5):
+        raise DomainError("invalid_schema", "min_rank: 4 or 5")
+    if daily_limit is not None and (not isinstance(daily_limit, int) or not 1 <= daily_limit <= AUTO_APPLY_MAX_PER_DAY):
+        raise DomainError("invalid_schema", f"daily_limit: 1 to {AUTO_APPLY_MAX_PER_DAY}")
+
+    def change(data):
+        policy = {**DEFAULTS["auto_apply"], **data.get("auto_apply", {}), "enabled": bool(enabled), "changed_at": now()}
+        if min_rank is not None:
+            policy["min_rank"] = min_rank
+        if daily_limit is not None:
+            policy["daily_limit"] = daily_limit
+        return dict(data, auto_apply=policy)
+    return _save(store, candidate_id, change, actor, "auto_apply_changed")
 
 
 def set_quiet_hours(store, candidate_id, start, end, actor="candidate_via_agent"):

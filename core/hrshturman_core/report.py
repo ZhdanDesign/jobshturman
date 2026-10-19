@@ -7,7 +7,7 @@ from .common import DomainError
 from .workspace import get_candidate
 
 AFTER_AUTHORITY = {"sending", "sent_confirmed", "send_unknown", "not_sent_confirmed"}
-MANUAL_SEND_NOTE = "Отправка выполняется кандидатом вручную; подтверждение отправки записано со слов кандидата"
+MANUAL_SEND_NOTE = "Часть откликов отмечена со слов кандидата: подтверждения с площадки по ним нет"
 
 NEXT_STEP = {
     "needs_full_text": ("collector", "Получить полный текст вакансии"),
@@ -15,7 +15,7 @@ NEXT_STEP = {
     "evaluated": ("candidate", "Решить: откликаться, отложить или отказаться"),
     "approved": ("ai", "Подготовить комплект под вакансию"),
     "draft_ready": ("candidate", "Проверить комплект и разрешить отклик"),
-    "authorized": ("candidate", "Откликнуться и отметить отправку с доказательством"),
+    "authorized": ("ai", "Откликнуться через браузер и записать результат с доказательством"),
     "sending": ("runner", "Дождаться подтверждения или сверить результат"),
     "send_unknown": ("runner", "Сверить историю канала до любого повтора"),
     "not_sent_confirmed": ("ai", "Проверить комплект и повторить в пределах разрешения"),
@@ -77,7 +77,7 @@ def status(store, candidate_id):
         "funnel": {"counts": {k: len(v) for k, v in funnel.items()}, "ids": funnel},
         "next_steps": next_steps,
         "coverage": coverage and coverage["report"],
-        "limitations": ([MANUAL_SEND_NOTE] if cand["branch"] == "local" else [])
+        "limitations": ([MANUAL_SEND_NOTE] if any(a["evidence"]["level"] == "self_reported" for a in sent) else [])
         + ([] if coverage and coverage["report"]["complete"] else
            ["Охват источников неполный или не проверен: «нет вакансий» не означает отсутствие рынка"]),
     }

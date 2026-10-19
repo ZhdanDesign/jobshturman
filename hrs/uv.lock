@@ -528,7 +528,7 @@ dev = [
 
 [[package]]
 name = "hrs-keys"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "../key-server" }
 dependencies = [
     { name = "cryptography" },
@@ -556,7 +556,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -589,12 +589,12 @@ dev = [{ name = "hrs-keys", editable = "../key-server" }]
 
 [[package]]
 name = "hrshturman-core"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "../core" }
 
 [[package]]
 name = "hrshturman-local"
-version = "0.2.2"
+version = "0.3.0"
 source = { editable = "../local-app" }
 dependencies = [
     { name = "fpdf2" },

@@ -11,6 +11,8 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from hrshturman_core import report
+
 ROOT = Path(__file__).resolve().parents[2]
 LIBRARY = ROOT / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
 
@@ -83,8 +85,35 @@ class McpServerTests(unittest.TestCase):
                                      expected_version=app["version"], proof_ref="hh-response-777"))
             self.assertEqual(app["evidence"]["level"], "self_reported")
 
+            # The agent applies through the browser: attempt first, then the platform's proof.
+            payload(await call("vacancies_import", items=[{"source": "hh", "external_id": "2", "title": "COO",
+                                                           "text": "Полный текст"}]))
+            other = next(a for a in payload(await call("applications_list")) if a["vacancy"]["external_id"] == "2")
+            for name, kw in (("application_score", {"preliminary": 5, "final": 5, "why": "Совпадает",
+                                                    "fact_ids": [fact["object_id"]]}),
+                             ("application_decide", {"decision": "approve", "reason": "подходит"}),
+                             ("application_prepare", {"material": {"cv": "v2"}, "channel": "hh-main"})):
+                other = payload(await call(name, application_id=other["object_id"], expected_version=other["version"], **kw))
+            other = payload(await call("application_authorize", application_id=other["object_id"],
+                                       expected_version=other["version"], material_hash=other["material"]["hash"],
+                                       channel="hh-main", expires_at=expires))
+            other = payload(await call("application_send_start", application_id=other["object_id"],
+                                       expected_version=other["version"]))
+            self.assertEqual(other["state"], "sending")
+            again = await call("application_send_start", application_id=other["object_id"], expected_version=other["version"])
+            self.assertTrue(again.is_error)
+            missing = await call("application_send_result", application_id=other["object_id"],
+                                 expected_version=other["version"], sent=True, proof_ref="Вы откликнулись")
+            self.assertTrue(missing.is_error)  # a sent application needs the platform's id
+            other = payload(await call("application_send_result", application_id=other["object_id"],
+                                       expected_version=other["version"], sent=True, proof_ref="Вы откликнулись",
+                                       platform_id="https://hh.ru/applicant/negotiations/item?topicId=1"))
+            self.assertEqual((other["state"], other["evidence"]["level"]), ("sent_confirmed", "caller_supplied"))
+
             status = payload(await call("status_report"))
             self.assertEqual(status["funnel"]["counts"]["sent_self_reported"], 1)
+            self.assertEqual(status["funnel"]["counts"]["sent_confirmed"], 2)
+            self.assertIn(report.MANUAL_SEND_NOTE, status["limitations"])
             self.assertEqual(status["resume"], [{"track_id": "main", "status": "approved"}])
 
             stale = await call("application_revoke", application_id=app["object_id"], expected_version=1)
@@ -141,6 +170,75 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual([r["title"] for r in ranked["ranked"]], ["Финдиректор", "CFO"])
         self.assertEqual([r["rank"] for r in ranked["ranked"]], [5, 3])
         self.assertEqual({u["title"] for u in ranked["unscored"]}, {"Бухгалтер", "Директор по финансам"})
+
+    def test_browser_sends_stop_at_daily_limit(self):
+        self.params.env["HRS_SEND_PAUSE"] = "0"
+
+        async def scenario(s):
+            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            fact = payload(await call("fact_add", assertion="Рост выручки на 25%", employer="Альфа",
+                                      source_refs=[{"source_id": "cv", "locator": "p1"}]))
+            payload(await call("vacancies_import", items=[{"source": "hh", "external_id": str(i), "title": "CCO",
+                                                           "text": "Полный текст"} for i in range(41)]))
+            expires = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+            results = []
+            for app in payload(await call("applications_list")):
+                for name, kw in (("application_score", {"preliminary": 4, "final": 4, "why": "Совпадает",
+                                                        "fact_ids": [fact["object_id"]]}),
+                                 ("application_decide", {"decision": "approve", "reason": "подходит"}),
+                                 ("application_prepare", {"material": {"cv": "v1"}, "channel": "hh-main"})):
+                    app = payload(await call(name, application_id=app["object_id"], expected_version=app["version"], **kw))
+                app = payload(await call("application_authorize", application_id=app["object_id"],
+                                         expected_version=app["version"], material_hash=app["material"]["hash"],
+                                         channel="hh-main", expires_at=expires))
+                results.append(await call("application_send_start", application_id=app["object_id"],
+                                          expected_version=app["version"]))
+            return results
+        results = self.run_session(scenario)
+        self.assertFalse(any(r.is_error for r in results[:40]))
+        self.assertTrue(results[40].is_error)
+        self.assertIn("rate_limited", results[40].content[0].text)
+
+    def test_automatic_mode_takes_only_high_ranks_and_keeps_a_pause(self):
+        async def scenario(s):
+            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            fact = payload(await call("fact_add", assertion="Рост выручки на 25%", employer="Альфа",
+                                      source_refs=[{"source_id": "cv", "locator": "p1"}]))
+            payload(await call("vacancies_import", items=[{"source": "hh", "external_id": str(i), "title": t,
+                                                           "text": "Полный текст"}
+                                                          for i, t in enumerate(["CCO", "COO", "CFO"])]))
+            cards = {a["vacancy"]["title"]: a for a in payload(await call("applications_list"))}
+            for title, rank in (("CCO", 5), ("COO", 4), ("CFO", 3)):
+                a = cards[title]
+                cards[title] = payload(await call("application_score", application_id=a["object_id"],
+                                                  expected_version=a["version"], preliminary=rank, final=rank,
+                                                  why="по профилю", fact_ids=[fact["object_id"]]))
+            out = {"off": await call("auto_apply_approve", application_id=cards["CCO"]["object_id"],
+                                     expected_version=cards["CCO"]["version"])}
+            out["status"] = payload(await call("auto_apply_set", enabled=True))
+            out["low"] = await call("auto_apply_approve", application_id=cards["CFO"]["object_id"],
+                                    expected_version=cards["CFO"]["version"])
+            started = []
+            for title in ("CCO", "COO"):
+                a = payload(await call("auto_apply_approve", application_id=cards[title]["object_id"],
+                                       expected_version=cards[title]["version"]))
+                a = payload(await call("application_prepare", application_id=a["object_id"],
+                                       expected_version=a["version"], material={"cv": title}, channel="hh-main"))
+                a = payload(await call("auto_apply_authorize", application_id=a["object_id"], expected_version=a["version"]))
+                started.append(await call("application_send_start", application_id=a["object_id"],
+                                          expected_version=a["version"]))
+            out["started"] = started
+            out["after"] = payload(await call("auto_apply_status"))
+            return out
+        out = self.run_session(scenario)
+        self.assertIn("permission_required", out["off"].content[0].text)
+        self.assertEqual([q["title"] for q in out["status"]["queue"]], ["CCO", "COO"])
+        self.assertEqual(out["status"]["left_today"], 40)
+        self.assertIn("permission_required", out["low"].content[0].text)
+        first, second = out["started"]
+        self.assertEqual(payload(first)["authority"]["by"], "auto_policy")
+        self.assertIn("rate_limited", second.content[0].text)  # a minute between two applications
+        self.assertEqual(out["after"]["left_today"], 39)
 
     def test_state_survives_restart(self):  # СЦ-10: a new AI session gets the stored state
         async def first(s):

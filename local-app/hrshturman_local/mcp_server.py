@@ -6,7 +6,8 @@ Run:  python3 -m hrshturman_local.mcp_server                      (stdio, Claude
 import argparse
 import functools
 import inspect
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from mcp.server.mcpserver import Context, Elicit, ElicitationResult, MCPServer, Resolve
@@ -16,10 +17,16 @@ from pydantic import BaseModel, Field, create_model
 from hrshturman_core import DomainError, Store
 from hrshturman_core import applications as apps
 from hrshturman_core import checks, intake, methodology, report, resume
+from hrshturman_core import schedule as schedule_core
 from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.workspace import create_candidate
 
 from . import collector_feed, config, help_text, render
+
+BROWSER_WORKER = "agent-browser"
+DAILY_SEND_LIMIT = 40
+# Between two browser applications, so the platform does not see a robot. HRS_SEND_PAUSE only for tests.
+MIN_PAUSE_SECONDS = int(os.environ.get("HRS_SEND_PAUSE", "60"))
 
 INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике.
 Приложение хранит факты, резюме, карточки откликов и воронку; ты интервьюируешь, пишешь черновики и оцениваешь вакансии.
@@ -29,7 +36,13 @@ INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска ра
   нужен ответ или подтверждение человека или работа на сегодня завершена, и каждый раз говори, что дальше.
 - Не выдумывай факты и цифры. Каждое утверждение резюме ссылается на fact_id.
 - Подтверждение анкеты, фактов, резюме, решение по вакансии, разрешение и отметку об отправке делай только после явных слов кандидата в этом разговоре.
-- Отправку кандидат делает сам. Отмечай её только с доказательством (ссылка, скриншот, номер отклика).
+  Исключение — автоотклики (auto_apply_status): если человек сам их включил, решение и разрешение по вакансии
+  с высокой оценкой дают auto_apply_approve и auto_apply_authorize, без вопроса по каждой.
+- Отклик отправляешь ты сам через браузер, но только по разрешению кандидата (application_authorize) или автооткликов и только этим комплектом.
+  Перед отправкой application_send_start, после неё application_send_result с номером отклика или ссылкой с площадки.
+  Не уверен, ушёл ли отклик: application_send_unknown, повтор только после сверки истории откликов на площадке.
+  Темп бережёт аккаунт: не больше 40 откликов в сутки (лимит в send_start), на «я не робот», вход или лимит площадки остановись и позови кандидата.
+  Если кандидат откликнулся сам, отметь это application_record_sent с доказательством (ссылка, скриншот, номер отклика).
 - Ошибка с кодом state_version_conflict значит, что объект изменился: перечитай его и повтори с новой версией.
 - Анкету диагностики (первый этап) задавай блоками через intake_ask: pains, situation_goal, situation_search, situation_limits.
   Спрашивай только блоки из missing_blocks в intake_get; asked_by="none" значит, что блок уже отвечен.
@@ -383,10 +396,91 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
     @tool
     def application_record_sent(application_id: str, expected_version: int, proof_ref: str,
                                 observed_at: str | None = None) -> dict:
-        """Кандидат откликнулся сам. proof_ref — ссылка, номер отклика или имя скриншота. Отметка хранится как «со слов кандидата»."""
+        """Кандидат откликнулся сам, без агента. proof_ref — ссылка, номер отклика или имя скриншота. Отметка хранится как «со слов кандидата»."""
         evidence = {"observed_at": observed_at or datetime.now(timezone.utc).isoformat(), "proof_ref": proof_ref}
         return apps.record_sent_by_candidate(store, cid, application_id, expected_version, evidence,
                                              actor="candidate_via_agent")
+
+    @tool
+    def application_send_start(application_id: str, expected_version: int) -> dict:
+        """Перед отправкой отклика через браузер: проверяет разрешение, паузу и суточный лимит, фиксирует попытку.
+        Повторная попытка по той же вакансии без application_send_result невозможна."""
+        started = browser_attempts()
+        app = next((a for a in apps.list_applications(store, cid) if a["object_id"] == application_id), None)
+        auto = bool(app and (app.get("authority") or {}).get("by") == "auto_policy")
+        limit = auto_policy()["daily_limit"] if auto else DAILY_SEND_LIMIT
+        if len(started) >= limit:
+            raise DomainError("rate_limited", f"За сутки уже {len(started)} откликов через браузер, лимит {limit}. "
+                              "Продолжай завтра.")
+        if started:
+            wait = MIN_PAUSE_SECONDS - (datetime.now(timezone.utc) - started[-1]).total_seconds()
+            if wait > 0:
+                raise DomainError("rate_limited", f"Пауза между откликами: подожди ещё {int(wait) + 1} с (retry_after).")
+        return apps.reserve(store, cid, application_id, expected_version, BROWSER_WORKER, actor="agent")
+
+    def browser_attempts():
+        """Start times of browser applications in the last 24 hours, oldest first."""
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        stamps = [datetime.fromisoformat(a["attempt"]["started_at"]) for a in apps.list_applications(store, cid)
+                  if (a.get("attempt") or {}).get("worker") == BROWSER_WORKER]
+        return sorted(t for t in stamps if t > since)
+
+    def auto_policy():
+        return schedule_core.get_settings(store, cid)["auto_apply"]
+
+    @tool
+    def auto_apply_status() -> dict:
+        """Автоотклики: включены ли, порог оценки, сколько ещё можно сегодня и очередь вакансий с оценкой не ниже
+        порога, на которые ещё не откликались (evaluated → approve, approved → комплект, draft_ready → разрешение,
+        authorized → отправка)."""
+        policy = auto_policy()
+        left = max(0, min(policy["daily_limit"], DAILY_SEND_LIMIT) - len(browser_attempts()))
+        queue = [{"application_id": a["object_id"], "version": a["version"], "state": a["state"],
+                  "title": a["vacancy"].get("title"), "company": a["vacancy"].get("company"),
+                  "url": a["vacancy"].get("url"), "rank": a["score"]["final"]}
+                 for a in apps.list_applications(store, cid)
+                 if a["state"] in ("evaluated", "approved", "draft_ready", "authorized")
+                 and (a["score"] or {}).get("final") and a["score"]["final"] >= policy["min_rank"]]
+        queue.sort(key=lambda q: -q["rank"])
+        return {"policy": policy, "left_today": left if policy["enabled"] else 0,
+                "pause_seconds": MIN_PAUSE_SECONDS, "queue": queue if policy["enabled"] else [],
+                "queue_size": len(queue)}
+
+    @tool
+    def auto_apply_set(enabled: bool, min_rank: int | None = None, daily_limit: int | None = None) -> dict:
+        """Включить или выключить автоотклики. Только по явным словам человека в этом разговоре: это его постоянное
+        разрешение откликаться без вопроса по каждой вакансии с оценкой min_rank+ (4 или 5), не больше daily_limit
+        (до 40) в сутки. Пачку откликов запускает сам человек словами «запусти автоотклики»; расписание отклики
+        не запускает. Порог, лимит и паузу держит hrs."""
+        schedule_core.set_auto_apply(store, cid, enabled, min_rank, daily_limit)
+        return auto_apply_status()
+
+    @tool
+    def auto_apply_approve(application_id: str, expected_version: int) -> dict:
+        """Автоотклики: решение «откликаться» по вакансии с итоговой оценкой не ниже порога, без вопроса человеку."""
+        return apps.auto_approve(store, cid, application_id, expected_version, auto_policy())
+
+    @tool
+    def auto_apply_authorize(application_id: str, expected_version: int) -> dict:
+        """Автоотклики: разрешение на подготовленный комплект (draft_ready) на сутки, без вопроса человеку."""
+        return apps.auto_authorize(store, cid, application_id, expected_version, auto_policy())
+
+    @tool
+    def application_send_result(application_id: str, expected_version: int, sent: bool, proof_ref: str,
+                                platform_id: str | None = None, check_reference: str | None = None,
+                                observed_at: str | None = None) -> dict:
+        """Итог отправки через браузер. sent=true: platform_id — номер отклика или ссылка на переписку на площадке.
+        sent=false: check_reference — где проверил, что отклика нет (страница откликов, сообщение площадки).
+        proof_ref — что видел: текст подтверждения или имя скриншота."""
+        evidence = {"observed_at": observed_at or datetime.now(timezone.utc).isoformat(), "proof_ref": proof_ref,
+                    "platform_id": platform_id, "check_reference": check_reference}
+        return apps.reconcile(store, cid, application_id, expected_version, "sent" if sent else "not_sent",
+                              {k: v for k, v in evidence.items() if v is not None}, actor="agent")
+
+    @tool
+    def application_send_unknown(application_id: str, expected_version: int, reason: str) -> dict:
+        """Нажал «Откликнуться», но подтверждения не увидел (сбой, закрылась страница). Дальше только сверка, не повтор."""
+        return apps.mark_unknown(store, cid, application_id, expected_version, reason, actor="agent")
 
     @tool
     def application_record_employer_event(application_id: str, expected_version: int, kind: str, occurred_at: str,

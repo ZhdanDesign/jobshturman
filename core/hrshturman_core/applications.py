@@ -4,7 +4,7 @@ Delivery state and employer funnel are separate models (spec section 12).
 Vacancies arrive through import_vacancies in a neutral format; the adapter for
 collector/CONTRACT.md converts into it. This module never parses sources.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .common import DomainError, check_id, digest, parse_time, reject_secrets
 from .workspace import get_candidate
@@ -115,6 +115,39 @@ def decide(store, candidate_id, application_id, expected_version, decision, reas
                    decision=decision)
 
 
+def _policy_rank(app, policy):
+    if not policy.get("enabled"):
+        raise DomainError("permission_required", "Автоотклики выключены: решение и разрешение даёт человек")
+    final = (app["score"] or {}).get("final")
+    if not final or final < policy["min_rank"]:
+        raise DomainError("permission_required", f"Автоотклик только на вакансии с итоговой оценкой {policy['min_rank']}+")
+    return final
+
+
+def auto_approve(store, candidate_id, application_id, expected_version, policy, actor="auto_policy"):
+    """Automatic mode: the person's standing permission stands for «approve» on a high-ranked vacancy."""
+    def change(app, _):
+        _require(app, {"evaluated"}, "approve automatically")
+        rank = _policy_rank(app, policy)
+        return {"state": "approved", "decision": {"decision": "approve", "reason": f"автоотклик: оценка {rank}",
+                                                  "by": "auto_policy"}}
+    return _mutate(store, candidate_id, application_id, expected_version, actor, change, "decided", decision="approve")
+
+
+def auto_authorize(store, candidate_id, application_id, expected_version, policy, actor="auto_policy"):
+    """Automatic mode: permission for the current package, valid one day, while the mode stays on."""
+    expiry = datetime.now(timezone.utc) + timedelta(days=1)
+
+    def change(app, _):
+        _require(app, {"draft_ready"}, "authorize automatically")
+        _policy_rank(app, policy)
+        return {"state": "authorized", "authority": {"material_hash": app["material"]["hash"],
+                                                     "channel": app["material"]["channel"],
+                                                     "expires_at": expiry.isoformat(), "revoked": False,
+                                                     "by": "auto_policy"}}
+    return _mutate(store, candidate_id, application_id, expected_version, actor, change, "authorized")
+
+
 def prepare(store, candidate_id, application_id, expected_version, material, channel, actor="ai"):
     """Stage 17: exact package for this vacancy. Hash binds later authority to these bytes."""
     if not isinstance(material, dict) or not material:
@@ -189,7 +222,7 @@ def record_sent_by_candidate(store, candidate_id, application_id, expected_versi
 
 
 def reserve(store, candidate_id, application_id, expected_version, worker, actor="runner"):
-    """Durable attempt before an external call (future action adapter). One operation per vacancy."""
+    """Durable attempt before an external call (the agent's browser). One operation per vacancy."""
     check_id(worker, "worker")
 
     def change(app, cand):
@@ -200,7 +233,7 @@ def reserve(store, candidate_id, application_id, expected_version, worker, actor
         vac, channel = app["vacancy"], app["material"]["channel"]
         return {"state": "sending", "operation_id": app["operation_id"] or
                 f"{candidate_id}:{channel}:apply:{vac['source']}:{vac['external_id']}",
-                "attempt": {"worker": worker}}
+                "attempt": {"worker": worker, "started_at": datetime.now(timezone.utc).isoformat()}}
     return _mutate(store, candidate_id, application_id, expected_version, actor, change, "reserved")
 
 

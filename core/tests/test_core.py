@@ -285,10 +285,8 @@ class ApplicationTests(Base):
 
 
 class BranchTests(Base):
-    def test_manual_send_note_only_for_local_branch(self):
+    def test_service_branch_notice(self):
         create_candidate(self.store, "cand-s", "Europe/Moscow", branch="service")
-        self.assertIn(report.MANUAL_SEND_NOTE, report.status(self.store, "cand-a")["limitations"])
-        self.assertNotIn(report.MANUAL_SEND_NOTE, report.status(self.store, "cand-s")["limitations"])
         intake.save_draft(self.store, "cand-s", [1])
         self.assertEqual(intake.get_intake(self.store, "cand-s")["request_map"]["stored_data_notice"],
                          intake.STORED_DATA_NOTICE["service"])

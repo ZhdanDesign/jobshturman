@@ -104,6 +104,39 @@ def test_claude_skill_follows_claude_config_dir(home, monkeypatch):
     assert not (home / ".claude" / "skills").exists()
 
 
+def fake_npx(home: Path) -> Path:
+    npx = home / "bin" / "npx"
+    npx.parent.mkdir(exist_ok=True)
+    npx.write_text("#!/bin/sh\n")
+    npx.chmod(0o755)
+    return npx
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX npx path")
+def test_browser_is_registered_for_both_agents_with_its_own_profile(home, monkeypatch):
+    monkeypatch.setenv("HRSHTURMAN_HOME", str(home / "hrs-data"))
+    db = fake_claude(home)
+    npx = fake_npx(home)
+    (home / ".codex").mkdir()
+
+    first, second = setup.setup_browser(), setup.setup_browser()
+
+    assert [r["status"] for r in first] == ["added", "added"]
+    assert [r["status"] for r in second] == ["already", "already"]
+    claude_args = json.loads(db.read_text())["playwright"]
+    codex = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]["playwright"]
+    assert claude_args[0] == codex["command"] == str(npx)
+    assert claude_args[1:] == codex["args"]
+    assert setup.PLAYWRIGHT_MCP in codex["args"] and "--snapshot-mode" in codex["args"]
+    assert codex["args"][codex["args"].index("--user-data-dir") + 1] == str(home / "hrs-data" / "browser-profile")
+
+
+def test_browser_needs_node(home):
+    fake_claude(home)
+    assert [r["status"] for r in setup.setup_browser()] == ["needs_node"]
+    assert setup.run()["browser"][0]["status"] == "needs_node"
+
+
 def test_skill_frontmatter_is_valid():
     head = (SKILL / "SKILL.md").read_text(encoding="utf-8").split("---")[1]
     fields = dict(line.split(": ", 1) for line in head.strip().splitlines())
