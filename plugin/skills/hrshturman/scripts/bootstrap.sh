@@ -37,10 +37,10 @@ install_wheels() {
   uv tool install --force --python 3.12 --find-links "$1" hrshturman >&2
 }
 
-version_of() { grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1; }
-older() {  # $1 < $2, versions X.Y.Z
+version_of() { grep -Eo '[0-9]+(\.[0-9]+){2,3}' | head -n 1; }
+older() {  # $1 < $2, versions X.Y.Z or X.Y.Z.N (small releases)
   awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, ".")
-    for (i = 1; i <= 3; i++) { if (x[i] + 0 < y[i] + 0) exit 0; if (x[i] + 0 > y[i] + 0) exit 1 } exit 1 }'
+    for (i = 1; i <= 4; i++) { if (x[i] + 0 < y[i] + 0) exit 0; if (x[i] + 0 > y[i] + 0) exit 1 } exit 1 }'
 }
 
 BIN=$(uv tool dir --bin)

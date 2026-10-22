@@ -46,7 +46,7 @@ function Install-Wheels($dir) {
 $Bin = (& uv tool dir --bin).Trim()
 $Hrs = Join-Path $Bin $(if ($IsLinux -or $IsMacOS) { 'hrs' } else { 'hrs.exe' })
 $Latest = 'https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip'
-function Version-Of($text) { ([regex]'\d+\.\d+\.\d+').Match("$text").Value }
+function Version-Of($text) { ([regex]'\d+(\.\d+){2,3}').Match("$text").Value }
 if (-not $Source) {
     if (-not (Test-Path $Hrs)) {
         $Source = $Latest

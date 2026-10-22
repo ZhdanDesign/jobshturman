@@ -193,10 +193,13 @@ echo "hrs $*" >> "{log}" """,
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX bootstrap")
-@pytest.mark.parametrize("installed, updates", [("0.7.0", True), ("0.9.2", False), ("0.10.0", False)])
-def test_bootstrap_brings_an_old_hrs_to_the_latest_release(home, installed, updates):
-    """The command from the site is how a person reinstalls: an older hrs is replaced by the latest release."""
-    bin_dir, log = fake_tools(home, installed, "0.9.2")
+@pytest.mark.parametrize("installed, latest, updates", [
+    ("0.7.0", "0.9.2", True), ("0.9.2", "0.9.2", False), ("0.10.0", "0.9.2", False),
+    ("0.9.4", "0.9.4.1", True), ("0.9.4.1", "0.9.4.2", True), ("0.9.4.2", "0.9.4.2", False)])
+def test_bootstrap_brings_an_old_hrs_to_the_latest_release(home, installed, latest, updates):
+    """The command from the site is how a person reinstalls: an older hrs is replaced by the latest release.
+    Small releases carry a fourth number (0.9.4.1)."""
+    bin_dir, log = fake_tools(home, installed, latest)
     env = {**os.environ, "HOME": str(home), "HRS_SOURCE": "", "PATH": os.pathsep.join([str(bin_dir), "/usr/bin", "/bin"])}
     out = subprocess.run(["sh", str(SKILL / "scripts" / "bootstrap.sh")], env=env, capture_output=True, text=True,
                          check=False)
@@ -271,3 +274,20 @@ def test_skill_goes_to_grok_hermes_and_openclaw_when_they_are_here(home):
     report = setup.run(str(SKILL))
     assert {s["skill"] for s in report["skills"]} == {
         str(home / folder / "skills" / "hrshturman") for folder in (".agents", ".grok", ".hermes")}
+
+
+def test_the_data_folder_tells_any_agent_how_to_work(home):
+    """An agent opened in the JobShturman folder (and every scheduled wake, which starts there) reads the rules
+    from AGENTS.md (Codex, Grok, Hermes, OpenClaw) and CLAUDE.md (Claude Code). The person's own edits stay."""
+    from hrs_cli import paths
+    report = setup.run()
+    folder = paths.settings().workspace
+    agents, claude = folder / "AGENTS.md", folder / "CLAUDE.md"
+    text = agents.read_text(encoding="utf-8")
+    assert "agent_rules" in text and "work_guide" in text and "license_status" in text
+    assert claude.read_text(encoding="utf-8").strip().endswith("@AGENTS.md")
+    assert {f["status"] for f in report["workspace_rules"]} == {"installed"}
+    assert {f["status"] for f in setup.run()["workspace_rules"]} == {"already"}
+    claude.write_text("Мои правила\n", encoding="utf-8")
+    assert {f["status"] for f in setup.run()["workspace_rules"]} == {"already", "kept"}
+    assert claude.read_text(encoding="utf-8") == "Мои правила\n"

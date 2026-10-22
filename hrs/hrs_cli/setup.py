@@ -15,6 +15,8 @@
 - Skill: the installer skill folder is copied to ~/.agents/skills (also read by DeepSeek Harness and other
   agents), to ~/.claude/skills unless it came with the plugin, and to the skills folders of Grok Build,
   Hermes and OpenClaw when they are on this machine.
+- Rules: AGENTS.md and CLAUDE.md (which includes AGENTS.md) in the data folder, so an agent opened there and
+  every scheduled wake read how to work with JobShturman. A file the person took over is left alone.
 - Browser: a Playwright MCP server named playwright, so the agent applies on hh.ru itself.
   It runs Chrome with its own profile under the hrs data folder: the person signs in once,
   their everyday Chrome stays untouched. Needs Node.js (npx); without it the report says needs_node.
@@ -236,8 +238,33 @@ def run(skill_dir: str | None = None, from_plugin: bool = False) -> dict:
         homes = {"grok": grok_home(), "hermes": hermes_home(), "openclaw": openclaw_home()}
         targets += [homes[agent] / "skills" for agent in ("grok", "hermes", "openclaw") if agent in found]
         report["skills"] = install_skill(Path(skill_dir), targets)
+    report["workspace_rules"] = setup_workspace_rules()
     report["schedule"] = setup_schedule()
     return report
+
+
+MARK = "<!-- JobShturman"
+
+
+def setup_workspace_rules() -> list[dict]:
+    """AGENTS.md and CLAUDE.md in the data folder: an agent opened there, and every scheduled wake (it starts
+    there), reads how to work with JobShturman. A file whose first line is no longer ours is the person's."""
+    folder = paths.settings().workspace
+    folder.mkdir(parents=True, exist_ok=True)
+    done = []
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        text = (Path(__file__).parent / "static" / f"workspace-{name}").read_text(encoding="utf-8")
+        dest = folder / name
+        old = dest.read_text(encoding="utf-8") if dest.is_file() else None
+        if old is not None and not old.startswith(MARK):
+            status = "kept"
+        elif old == text:
+            status = "already"
+        else:
+            dest.write_text(text, encoding="utf-8")
+            status = "installed"
+        done.append({"file": str(dest), "status": status})
+    return done
 
 
 def setup_schedule() -> dict:
