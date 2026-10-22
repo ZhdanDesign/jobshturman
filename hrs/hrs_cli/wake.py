@@ -4,7 +4,8 @@ computer in its non-interactive mode, with only the JobShturman tools allowed.
 The agent continues the person's work where it stopped, only what needs no person: collecting and ranking
 vacancies, preparing the application sets. It sends nothing to employers (automatic applications are started
 by the person in a conversation) and asks no questions. Its short answer goes into wake.md next to the digest
-and into one system notification. Quiet hours and a paused search keep it asleep.
+and into one system notification. Quiet hours and a paused search keep it asleep. When the agent's own login
+has expired, the person gets a notification to log in again instead of a silent failure.
 """
 import os
 import shutil
@@ -31,6 +32,16 @@ PROMPT = (
 EXTRA_PATH = ("~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "~/.npm-global/bin", "~/.bun/bin",
               "~/AppData/Roaming/npm", "~/.cargo/bin")
 SERVER = "hrshturman"
+# What the agents print when their login is gone (Claude Code: "OAuth session expired", "Please run /login";
+# Codex: "Not logged in", "401 Unauthorized").
+LOGIN_SIGNS = ("oauth", "/login", "not logged in", "codex login", "invalid api key", "authentication_error",
+               "unauthorized", " 401")
+LOGIN = {
+    "claude": "JobShturman не\u00a0смог начать работу: вход в\u00a0Claude истёк. Пожалуйста, войдите в\u00a0Claude: "
+              "откройте Claude Code и\u00a0выполните команду /login. Дальше всё продолжится само.",
+    "codex": "JobShturman не\u00a0смог начать работу: вход в\u00a0Codex истёк. Пожалуйста, войдите в\u00a0Codex: "
+             "выполните в\u00a0терминале команду codex login. Дальше всё продолжится само.",
+}
 
 
 def _path_env() -> str:
@@ -91,12 +102,21 @@ def run(settings: dict, now: datetime | None = None, runner=_run, notify=None) -
     code, text = runner(command(agent, exe, PROMPT.format(product=PRODUCT_NAME, part=part_of_day(local))),
                         str(folder), env)
     result = {"agent": agent, "code": code}
-    if code != 0:
+    if code != 0 and not logged_out(text):
         return result | {"error": text[-600:]}
-    answer = text[-2000:]
+    if code != 0:
+        result["error"], answer = "login", LOGIN[agent]
+    else:
+        answer = text[-2000:]
     wake_file().write_text(f"# {PRODUCT_NAME}: {local:%d.%m.%Y %H:%M}\n\n{answer}\n", encoding="utf-8")
     if notify is None:
         from .schedule import notify
     first = " ".join(answer.split())[:220]
     result["notified"] = bool(first) and notify(PRODUCT_NAME, first)
     return result | {"file": str(wake_file())}
+
+
+def logged_out(text: str) -> bool:
+    """The agent did not start because its login expired."""
+    low = text.lower()
+    return any(sign in low for sign in LOGIN_SIGNS)

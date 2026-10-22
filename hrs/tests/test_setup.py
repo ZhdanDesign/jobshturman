@@ -151,7 +151,8 @@ def test_bootstrap_keeps_an_installed_hrs_and_reports_as_json(home):
     bin_dir = home / ".local" / "bin"
     bin_dir.mkdir(parents=True)
     hrs = bin_dir / "hrs"
-    hrs.write_text(f"#!{sys.executable}\nimport json, sys\nprint(json.dumps({{'argv': sys.argv[1:]}}))\n")
+    hrs.write_text(f"#!{sys.executable}\nimport json, sys\n"  # newer than any release: kept as is
+                   f"print('jbs 99.0.0' if sys.argv[1:] == ['--version'] else json.dumps({{'argv': sys.argv[1:]}}))\n")
     hrs.chmod(0o755)
     env = {**os.environ, "HOME": str(home), "HRS_SOURCE": "", "UV_TOOL_BIN_DIR": str(bin_dir),
            "PATH": os.pathsep.join([str(Path(UV).parent), "/usr/bin", "/bin"])}
@@ -164,6 +165,46 @@ def test_bootstrap_keeps_an_installed_hrs_and_reports_as_json(home):
     out = subprocess.run(["sh", str(SKILL / "scripts" / "bootstrap.sh")], env=env, capture_output=True, text=True,
                          check=False)
     assert out.returncode == 1 and "не нашёл источник" in out.stderr
+
+
+def fake_tools(home: Path, installed: str, latest: str) -> tuple[Path, Path]:
+    """`uv`, `curl` and an installed `hrs` that only record what the bootstrap asks of them."""
+    bin_dir = home / "fake-bin"
+    bin_dir.mkdir()
+    log = home / "calls.log"
+    scripts = {
+        "uv": f"""case "$1 $2" in
+  "tool dir") echo "{bin_dir}" ;;
+  "tool install") echo "uv $*" >> "{log}" ;;
+  "run --no-project") mkdir -p "${{10}}" && touch "${{10}}/hrshturman-{latest}-py3-none-any.whl" ;;
+esac""",
+        "curl": f"""echo "curl $*" >> "{log}"
+case "$*" in
+  *url_effective*) echo "https://github.com/ZhdanDesign/jobshturman/releases/tag/v{latest}" ;;
+  *) while [ $# -gt 0 ]; do [ "$1" = "-o" ] && touch "$2"; shift; done ;;
+esac""",
+        "hrs": f"""[ "$1" = "--version" ] && echo "jbs {installed}" && exit 0
+echo "hrs $*" >> "{log}" """,
+    }
+    for name, body in scripts.items():
+        (bin_dir / name).write_text("#!/bin/sh\n" + body + "\n")
+        (bin_dir / name).chmod(0o755)
+    return bin_dir, log
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX bootstrap")
+@pytest.mark.parametrize("installed, updates", [("0.7.0", True), ("0.9.2", False), ("0.10.0", False)])
+def test_bootstrap_brings_an_old_hrs_to_the_latest_release(home, installed, updates):
+    """The command from the site is how a person reinstalls: an older hrs is replaced by the latest release."""
+    bin_dir, log = fake_tools(home, installed, "0.9.2")
+    env = {**os.environ, "HOME": str(home), "HRS_SOURCE": "", "PATH": os.pathsep.join([str(bin_dir), "/usr/bin", "/bin"])}
+    out = subprocess.run(["sh", str(SKILL / "scripts" / "bootstrap.sh")], env=env, capture_output=True, text=True,
+                         check=False)
+    assert out.returncode == 0, out.stderr
+    calls = log.read_text()
+    assert ("uv tool install --force" in calls) == updates
+    assert ("releases/latest/download/jobshturman-wheels.zip" in calls) == updates
+    assert calls.strip().endswith(f"hrs setup --skill-dir {SKILL}")
 
 
 def test_grok_block_is_appended_once(home):

@@ -7,8 +7,8 @@
 #   - a URL or path to the release zip with wheels (hrshturman-<version>-wheels.zip);
 #   - a folder with those wheels;
 #   - a checkout of the project (a folder with hrs/pyproject.toml), installed editable.
-# Without SOURCE an hrs that is already installed is kept as is; otherwise the latest release
-# from GitHub is installed.
+# Without SOURCE the latest release from GitHub is installed, unless the installed hrs is already
+# that version or newer (or GitHub cannot be asked: then the installed hrs is kept).
 #
 # Steps: install uv if missing, install hrs with its own Python 3.12, then `hrs setup`
 # connects it to the agents found here (Claude Code, Codex, Grok Build, Hermes, OpenClaw) and copies this skill next to them.
@@ -16,7 +16,8 @@ set -eu
 
 SKILL_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SOURCE=${1:-${HRS_SOURCE:-}}
-DEFAULT_SOURCE="https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip"
+RELEASES="https://github.com/ZhdanDesign/jobshturman/releases"
+DEFAULT_SOURCE="$RELEASES/latest/download/jobshturman-wheels.zip"
 FROM_PLUGIN=""
 case "$SKILL_DIR" in */.claude/plugins/*) FROM_PLUGIN="--from-plugin" ;; esac
 
@@ -36,9 +37,24 @@ install_wheels() {
   uv tool install --force --python 3.12 --find-links "$1" hrshturman >&2
 }
 
+version_of() { grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1; }
+older() {  # $1 < $2, versions X.Y.Z
+  awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, ".")
+    for (i = 1; i <= 3; i++) { if (x[i] + 0 < y[i] + 0) exit 0; if (x[i] + 0 > y[i] + 0) exit 1 } exit 1 }'
+}
+
 BIN=$(uv tool dir --bin)
-if [ -z "$SOURCE" ] && [ ! -x "$BIN/hrs" ]; then
-  SOURCE=$DEFAULT_SOURCE
+if [ -z "$SOURCE" ]; then
+  if [ ! -x "$BIN/hrs" ]; then
+    SOURCE=$DEFAULT_SOURCE
+  else
+    HAVE=$("$BIN/hrs" --version 2>/dev/null | version_of || true)
+    LATEST=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$RELEASES/latest" 2>/dev/null | version_of || true)
+    if [ -z "$HAVE" ] || { [ -n "$LATEST" ] && older "$HAVE" "$LATEST"; }; then
+      say "обновляю программу${HAVE:+ с версии $HAVE}${LATEST:+ до $LATEST}"
+      SOURCE=$DEFAULT_SOURCE
+    fi
+  fi
 fi
 if [ -n "$SOURCE" ]; then
   WORK=$(mktemp -d)

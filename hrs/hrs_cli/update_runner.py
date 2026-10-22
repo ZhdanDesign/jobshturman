@@ -55,7 +55,7 @@ def is_hrs(pid: int) -> bool:
     return any(Path(word).name in HRS_NAMES or "hrs_cli" in word for word in out.stdout.split())
 
 
-def _lock(handle) -> bool:
+def try_lock(handle) -> bool:
     try:
         if os.name == "nt":
             import msvcrt
@@ -72,7 +72,7 @@ def claim(folder: Path, pid: int):
     """Mark this hrs as holding the program open for as long as the returned file stays open."""
     folder.mkdir(parents=True, exist_ok=True)
     handle = (folder / f"{pid}.pid").open("a+", encoding="utf-8")
-    _lock(handle)
+    try_lock(handle)
     return handle
 
 
@@ -80,7 +80,7 @@ def locked(path: Path) -> bool:
     """Some running hrs holds the lock on this pid file."""
     try:
         with path.open("a+", encoding="utf-8") as handle:
-            return not _lock(handle)
+            return not try_lock(handle)
     except OSError:  # Windows does not open a file another process holds
         return True
 

@@ -270,24 +270,37 @@ def run(task, collector=None, now=None):
     try:
         result = _task(task, s, store, settings, paused, collector, now)
     finally:
-        lock.unlink(missing_ok=True)
+        lock.close()
+        Path(lock.name).unlink(missing_ok=True)
     core.record_run(store, s.candidate_id, task, result)
     return {"task": task, "at": (now or datetime.now(timezone.utc)).isoformat(), **result}
 
 
 def _lock(task):
-    """A task runs once at a time: the watch must not start a second wake while the first one works."""
-    from .update_runner import alive
+    """A task runs once at a time: the watch must not start a second wake while the first one works.
+    The running task holds a lock on locks/<task>.pid (returned open; closing it frees the task), so the file of
+    a task that crashed does not block it, even when its pid now belongs to another program. A file of an
+    older hrs, written without the lock (no "locked" mark), counts while its pid is still an hrs."""
+    from .update_runner import alive, is_hrs, try_lock
     path = paths.data_dir() / "locks" / f"{task}.pid"
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        pid = int(path.read_text(encoding="utf-8") or 0)
-    except (OSError, ValueError):
-        pid = 0
-    if pid and pid != os.getpid() and alive(pid):
+        words = path.read_text(encoding="utf-8").split()
+    except OSError:
+        words = []
+    legacy = int(words[0]) if len(words) == 1 and words[0].isdigit() else 0
+    try:
+        handle = path.open("a+", encoding="utf-8")
+    except OSError:  # Windows: another process holds the file
         return None
-    path.write_text(str(os.getpid()), encoding="utf-8")
-    return path
+    if not try_lock(handle) or (legacy and legacy != os.getpid() and alive(legacy) and is_hrs(legacy)):
+        handle.close()
+        return None
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"{os.getpid()} locked")
+    handle.flush()
+    return handle
 
 
 def _due(entry, last, local_now):

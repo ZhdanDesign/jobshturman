@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import plistlib
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -211,14 +212,34 @@ def test_the_watch_catches_up_on_missed_tasks(tmp_path, monkeypatch):
 
 
 def test_a_task_never_runs_twice_at_once(tmp_path, monkeypatch):
+    from hrs_cli import update_runner
     home(tmp_path, monkeypatch)
     lock = paths.data_dir() / "locks" / "wake.pid"
-    lock.parent.mkdir(parents=True)
-    lock.write_text(str(os.getppid()))  # a live process holds the wake
-    assert schedule.run("wake") == {"task": "wake", "skipped": "running"}
+    held = update_runner.claim(lock.parent, "wake")  # a running wake holds the lock on its file
+    try:
+        assert schedule.run("wake") == {"task": "wake", "skipped": "running"}
+    finally:
+        held.close()
     lock.write_text("999999999")  # a dead one does not
     assert schedule.run("wake", now=NOON.replace(hour=1))["task"] == "wake"
     assert not lock.exists()
+
+
+def test_a_crashed_task_whose_pid_went_to_another_program_runs_again(tmp_path, monkeypatch):
+    """A wake that crashed left its pid file; the pid now belongs to another program. Waiting for it would
+    mean the wake never runs again."""
+    if os.name == "nt":
+        return
+    home(tmp_path, monkeypatch)
+    other = subprocess.Popen(["sleep", "30"])
+    try:
+        lock = paths.data_dir() / "locks" / "wake.pid"
+        lock.parent.mkdir(parents=True)
+        lock.write_text(str(other.pid))
+        assert schedule.run("wake", now=NOON.replace(hour=1))["task"] == "wake"
+        assert not lock.exists()
+    finally:
+        other.kill()
 
 
 def fake_agent(tmp_path, name, answer="Собрал 12 вакансий, 3 ждут вашего решения."):
@@ -284,3 +305,25 @@ def test_the_agent_asks_the_hours_once_and_any_agent_can_register_its_task(tmp_p
     for agent in ("grok", "hermes", "openclaw"):
         core.register_agent_task(store, s.candidate_id, agent, "JobShturman", "08:45, 13:00, 18:30", "работа по поиску")
     assert {t["agent"] for t in schedule.status()["agent_tasks"]} == {"grok", "hermes", "openclaw"}
+
+
+def test_wake_asks_the_person_to_log_in_when_the_agent_session_expired(tmp_path, monkeypatch, capsys):
+    """An expired login made every wake fail silently: the person must hear what to do."""
+    from hrs_cli import wake
+    home(tmp_path, monkeypatch)
+    monkeypatch.setattr(wake, "EXTRA_PATH", ())
+    monkeypatch.setenv("PATH", str(fake_agent(tmp_path, "claude")))
+    s, store = schedule.store_for()
+    settings = core.get_settings(store, s.candidate_id)
+    day = datetime.now().astimezone().replace(hour=14, minute=0, second=0, microsecond=0)
+
+    expired = lambda cmd, cwd, env: (1, "API Error: 401 OAuth session expired. Please run /login")  # noqa: E731
+    out = wake.run(settings, now=day, runner=expired)
+    assert out["error"] == "login" and out["notified"]
+    shown = capsys.readouterr().out
+    assert "войдите в Claude" in shown.replace(" ", " ")
+    assert "/login" in wake.wake_file().read_text(encoding="utf-8")
+
+    other = lambda cmd, cwd, env: (1, "Traceback: something else broke")  # noqa: E731
+    out = wake.run(settings, now=day, runner=other)
+    assert out["error"] != "login" and "notified" not in out

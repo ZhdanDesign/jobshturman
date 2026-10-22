@@ -6,8 +6,8 @@
 #   - a URL or path to the release zip with wheels (hrshturman-<version>-wheels.zip);
 #   - a folder with those wheels;
 #   - a checkout of the project (a folder with hrs\pyproject.toml), installed editable.
-# Without SOURCE an hrs that is already installed is kept as is; otherwise the latest release
-# from GitHub is installed.
+# Without SOURCE the latest release from GitHub is installed, unless the installed hrs is already
+# that version or newer (or GitHub cannot be asked: then the installed hrs is kept).
 #
 # Steps: install uv if missing, install hrs with its own Python 3.12, then `hrs setup`
 # connects it to Claude Code and Codex and copies this skill next to them.
@@ -45,7 +45,21 @@ function Install-Wheels($dir) {
 
 $Bin = (& uv tool dir --bin).Trim()
 $Hrs = Join-Path $Bin $(if ($IsLinux -or $IsMacOS) { 'hrs' } else { 'hrs.exe' })
-if (-not $Source -and -not (Test-Path $Hrs)) { $Source = 'https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip' }
+$Latest = 'https://github.com/ZhdanDesign/jobshturman/releases/latest/download/jobshturman-wheels.zip'
+function Version-Of($text) { ([regex]'\d+\.\d+\.\d+').Match("$text").Value }
+if (-not $Source) {
+    if (-not (Test-Path $Hrs)) {
+        $Source = $Latest
+    } else {
+        $have = ''; $newest = ''
+        try { $have = Version-Of (& $Hrs --version 2>$null) } catch {}
+        try { $newest = Version-Of (Invoke-RestMethod -Uri 'https://api.github.com/repos/ZhdanDesign/jobshturman/releases/latest').tag_name } catch {}
+        if (-not $have -or ($newest -and [version]$have -lt [version]$newest)) {
+            Say "обновляю программу с версии $have до $newest"
+            $Source = $Latest
+        }
+    }
+}
 $Work = $null
 try {
     if ($Source) {
