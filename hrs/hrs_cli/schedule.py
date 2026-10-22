@@ -8,6 +8,12 @@
 Times are the computer's local time. Every task runs `python -m hrs_cli schedule run <task>` with the
 same interpreter and data folder as the install. Nothing here applies or writes to an employer.
 The daily `license` task also installs a newer hrs if one is out (see selfupdate.py).
+
+The schedule switches itself on: `jbs setup` (the installer and every self-update) and the start of
+`jbs serve` call ensure(), which puts back whatever is missing. `wake` starts the agent three times a day
+(wake.py). `watch` runs every hour and at login: it puts back tasks that went missing and runs today's
+tasks that were missed while the computer slept or was off. After the person takes the tasks out
+(`jbs schedule remove`), nothing puts them back until `jbs schedule install`.
 """
 import os
 import plistlib
@@ -61,28 +67,37 @@ def _times(entry):
     return [tuple(int(x) for x in t.split(":")) for t in entry["times"]]
 
 
-def plan(settings_dict, platform=None):
-    """What install writes and runs on this platform, without doing it."""
+def plan(settings_dict, platform=None, only=None):
+    """What install writes and runs on this platform, without doing it. only: these tasks."""
     platform = platform or sys.platform
     steps = []
     logs = paths.data_dir() / "logs"
     for task, entry in settings_dict["tasks"].items():
+        if only is not None and task not in only:
+            continue
+        hourly = task == "watch"
         if platform == "darwin":
             label = f"{LABEL}.{task}"
             path = launch_agents_dir() / f"{label}.plist"
             if not entry["enabled"]:
                 steps.append({"task": task, "remove": str(path), "run": [["launchctl", "bootout", _gui(label)]]})
                 continue
+            when = ({"StartInterval": entry.get("every_minutes", 60) * 60} if hourly else
+                    {"StartCalendarInterval": [{"Hour": h, "Minute": m} for h, m in _times(entry)]})
             body = plistlib.dumps({
-                "Label": label, "ProgramArguments": _command(task),
-                "StartCalendarInterval": [{"Hour": h, "Minute": m} for h, m in _times(entry)],
-                "EnvironmentVariables": _env(), "RunAtLoad": False,
+                "Label": label, "ProgramArguments": _command(task), **when,
+                "EnvironmentVariables": _env(), "RunAtLoad": hourly,
                 "StandardOutPath": str(logs / f"{task}.log"), "StandardErrorPath": str(logs / f"{task}.log")})
             steps.append({"task": task, "write": {str(path): body.decode()},
                           "run": [["launchctl", "bootout", _gui(label)], ["launchctl", "bootstrap", _gui(), str(path)]]})
         elif platform == "win32":
             run = [["schtasks", "/Delete", "/F", "/TN", f"{PRODUCT_NAME}\\{task}-{n}"] for n in range(6)]
-            if entry["enabled"]:
+            if entry["enabled"] and hourly:
+                line = subprocess.list2cmdline(_command(task))
+                run += [["schtasks", "/Create", "/F", "/SC", "HOURLY", "/MO", "1", "/TN", f"{PRODUCT_NAME}\\{task}-0",
+                         "/TR", line],
+                        ["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", f"{PRODUCT_NAME}\\{task}-1", "/TR", line]]
+            elif entry["enabled"]:
                 line = subprocess.list2cmdline(_command(task))
                 run += [["schtasks", "/Create", "/F", "/SC", "DAILY", "/ST", f"{h:02d}:{m:02d}",
                          "/TN", f"{PRODUCT_NAME}\\{task}-{n}", "/TR", line] for n, (h, m) in enumerate(_times(entry))]
@@ -95,7 +110,8 @@ def plan(settings_dict, platform=None):
                               "run": [["systemctl", "--user", "disable", "--now", f"{unit}.timer"]]})
                 continue
             env = "".join(f"Environment={k}={v}\n" for k, v in _env().items())
-            calendars = "".join(f"OnCalendar=*-*-* {h:02d}:{m:02d}:00\n" for h, m in _times(entry))
+            calendars = (f"OnBootSec=5min\nOnUnitActiveSec={entry.get('every_minutes', 60)}min\n" if hourly else
+                         "".join(f"OnCalendar=*-*-* {h:02d}:{m:02d}:00\n" for h, m in _times(entry)))
             steps.append({"task": task, "write": {
                 str(service): f"[Unit]\nDescription={PRODUCT_NAME}: {core.TASKS[task]}\n\n[Service]\nType=oneshot\n"
                               f"{env}ExecStart={subprocess.list2cmdline(_command(task))}\n",
@@ -111,12 +127,7 @@ def _gui(label=None):
     return f"{target}/{label}" if label else target
 
 
-def install(dry_run=False, platform=None, runner=_run):
-    """Put the enabled tasks into the system scheduler and take the disabled ones out. Safe to repeat."""
-    s, store = store_for()
-    steps = plan(core.get_settings(store, s.candidate_id), platform)
-    if dry_run:
-        return {"installed": False, "steps": steps}
+def _apply(steps, runner):
     (paths.data_dir() / "logs").mkdir(parents=True, exist_ok=True)
     for step in steps:
         for path, body in (step.get("write") or {}).items():
@@ -126,12 +137,51 @@ def install(dry_run=False, platform=None, runner=_run):
         for path in [removed] if isinstance(removed, str) else removed or []:
             Path(path).unlink(missing_ok=True)
         step["codes"] = [runner(cmd) for cmd in step["run"]]
-    return {"installed": True, "steps": steps}
+    return steps
+
+
+def install(dry_run=False, platform=None, runner=_run):
+    """Put the enabled tasks into the system scheduler and take the disabled ones out. Safe to repeat.
+    Called by the person (or the agent at their word): it also lifts an earlier `remove`."""
+    s, store = store_for()
+    steps = plan(core.get_settings(store, s.candidate_id), platform)
+    if dry_run:
+        return {"installed": False, "steps": steps}
+    core.set_system_scheduler(store, s.candidate_id, True)
+    return {"installed": True, "steps": _apply(steps, runner)}
+
+
+def _present(step, platform, runner):
+    """Whether the system scheduler already holds this step as planned."""
+    if platform == "win32":
+        names = [cmd[cmd.index("/TN") + 1] for cmd in step["run"] if cmd[1] == "/Create"]
+        return all(runner(["schtasks", "/Query", "/TN", name]) == 0 for name in names)
+    files = step.get("write") or {}
+    return all(Path(path).is_file() and Path(path).read_text(encoding="utf-8") == body for path, body in files.items())
+
+
+def ensure(platform=None, runner=_run, skip=()):
+    """Put back the enabled tasks that are missing or out of date, leave the rest alone. Does nothing after the
+    person took the schedule out, and with HRS_SCHEDULE=off. Never reloads the tasks in skip (the running
+    watch would stop itself)."""
+    if os.environ.get("HRS_SCHEDULE", "").lower() in ("off", "0", "no", "false"):
+        return {"skipped": "off"}
+    platform = platform or sys.platform
+    s, store = store_for()
+    settings = core.get_settings(store, s.candidate_id)
+    if not settings["system_scheduler"]:
+        return {"skipped": "removed_by_person"}
+    enabled = [t for t, e in settings["tasks"].items() if e["enabled"] and t not in skip]
+    missing = [step for step in plan(settings, platform, only=enabled) if not _present(step, platform, runner)]
+    _apply(missing, runner)
+    return {"restored": [step["task"] for step in missing]}
 
 
 def remove(platform=None, runner=_run):
-    """Take every task of hrs out of the system scheduler. Data and settings stay."""
+    """Take every task of hrs out of the system scheduler. Data and settings stay. Nothing puts them back
+    on its own until install()."""
     s, store = store_for()
+    core.set_system_scheduler(store, s.candidate_id, False)
     settings = core.get_settings(store, s.candidate_id)
     off = dict(settings, tasks={t: dict(e, enabled=False) for t, e in settings["tasks"].items()})
     steps = plan(off, platform)
@@ -162,8 +212,10 @@ def status():
     return {"tasks": settings["tasks"], "quiet_hours": settings["quiet_hours"], "agent_tasks": settings["agent_tasks"],
             "last_runs": settings["last_runs"], "installed": installed(),
             "digest_file": str(digest_path(s)), "logs": str(paths.data_dir() / "logs"),
-            "note": "Время задач — время этого компьютера. Компьютер должен быть включён; пропущенный во сне "
-                    "запуск macOS и Linux выполнят при пробуждении."}
+            "system_scheduler": settings["system_scheduler"],
+            "ask_wake_hours": not settings["tasks"]["wake"].get("agreed"),
+            "note": "Время задач — время этого компьютера. Сторож раз в час возвращает пропавшие задачи и догоняет "
+                    "пропущенные за сегодня, пока компьютер спал или был выключен."}
 
 
 # --- notifications ---
@@ -212,8 +264,65 @@ def run(task, collector=None, now=None):
     settings = core.get_settings(store, s.candidate_id)
     with store.read() as tx:
         paused = tx.find("candidate", s.candidate_id, "workspace")["paused"]
+    lock = _lock(task)
+    if lock is None:
+        return {"task": task, "skipped": "running"}
+    try:
+        result = _task(task, s, store, settings, paused, collector, now)
+    finally:
+        lock.unlink(missing_ok=True)
+    core.record_run(store, s.candidate_id, task, result)
+    return {"task": task, "at": (now or datetime.now(timezone.utc)).isoformat(), **result}
+
+
+def _lock(task):
+    """A task runs once at a time: the watch must not start a second wake while the first one works."""
+    from .update_runner import alive
+    path = paths.data_dir() / "locks" / f"{task}.pid"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pid = int(path.read_text(encoding="utf-8") or 0)
+    except (OSError, ValueError):
+        pid = 0
+    if pid and pid != os.getpid() and alive(pid):
+        return None
+    path.write_text(str(os.getpid()), encoding="utf-8")
+    return path
+
+
+def _due(entry, last, local_now):
+    """The latest of today's times that has passed and has had no run since, or None."""
+    slots = [local_now.replace(hour=h, minute=m, second=0, microsecond=0) for h, m in _times(entry)]
+    passed = [t for t in slots if t <= local_now]
+    if not passed:
+        return None
+    slot = max(passed)
+    if last and datetime.fromisoformat(last.replace("Z", "+00:00")) >= slot:
+        return None
+    return slot
+
+
+def catch_up(settings, now=None, runner=None):
+    """Run today's tasks whose time passed while the computer slept or was off."""
+    local_now = (now or datetime.now(timezone.utc)).astimezone()
+    done = []
+    for task, entry in settings["tasks"].items():
+        if not entry["enabled"] or task in core.NO_CATCH_UP:
+            continue
+        if _due(entry, (settings["last_runs"].get(task) or {}).get("at"), local_now):
+            out = (runner or run)(task, now=now)
+            done.append({"task": task, **{k: v for k, v in out.items() if k in ("skipped", "reason", "error")}})
+    return done
+
+
+def _task(task, s, store, settings, paused, collector, now):
+    if task == "watch":
+        return {"ensure": ensure(skip=("watch",)), "caught_up": catch_up(settings, now=now)}
     if paused and task != "license":
         result = {"skipped": "paused"}
+    elif task == "wake":
+        from . import wake
+        result = wake.run(settings, now=now)
     elif task == "license":
         from . import license
         info = license.refresh(force=True)
@@ -251,5 +360,4 @@ def run(task, collector=None, now=None):
         result = {"reason": picked["reason"]}
         if picked["notify"]:
             result |= {"reminder": picked["notify"]["id"], "notified": notify(PRODUCT_NAME, picked["notify"]["text"])}
-    core.record_run(store, s.candidate_id, task, result)
-    return {"task": task, "at": (now or datetime.now(timezone.utc)).isoformat(), **result}
+    return result

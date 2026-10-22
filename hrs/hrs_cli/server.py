@@ -34,7 +34,13 @@ INSTRUCTIONS = (
     "появится в чате; иначе задавай вопросы как обычно. builtin_browser: ui_open, затем открой url своим встроенным "
     "браузером (Browser pane Claude Code, браузер приложения Codex). external_browser: ui_open(external=true). "
     "Ответы со страницы сразу лежат в базе: читай их через intake_get, не переспрашивай."
-    "\n- Регулярные задачи программы (без агента): schedule_status, schedule_set, schedule_install. Сводка — digest_get, "
+    "\n- Расписание программы включается само при установке, спрашивать не нужно: schedule_status, schedule_set, "
+    "schedule_install. Три раза в день программа будит тебя без человека: тогда только подготовка, ничего не "
+    "отправляй. Пока в schedule_status ask_wake_hours=true, в первом разговоре после ключа своими словами спроси, "
+    "в какие часы человеку удобно, чтобы ты сам собирал вакансии и выходил на связь (предложи 9:30, 14:00 и 19:30 "
+    "или его время), и сохрани ответ: schedule_set(task=wake, times=...), затем schedule_install. Если твоя среда "
+    "умеет свои задачи по расписанию, предложи завести их на те же часы, заведи и вызови schedule_register. "
+    "Если system_scheduler=false, человек выключил расписание сам: не включай без его просьбы. Сводка — digest_get, "
     "напоминания — reminders_list. Свои задачи по расписанию регистрируй через schedule_register."
     "\n- Справка о продукте — product_help: отвечай по ней, когда человек спрашивает, как работать с JobShturman."
 )
@@ -172,18 +178,20 @@ def build(settings=None, collector: Collector | None = None):
     @mcp.tool()
     def schedule_install() -> dict:
         """Поставить включённые задачи hrs в системный планировщик (macOS launchd, Windows Task Scheduler,
-        Linux systemd). Только после согласия человека: скажи, что и когда будет запускаться."""
+        Linux systemd). При установке это происходит само; вызывай после schedule_set или когда человек просит
+        снова включить расписание, которое он выключил."""
         return domain(schedule.install)
 
     @mcp.tool()
     def schedule_remove() -> dict:
-        """Убрать все задачи программы из системного планировщика. Данные и настройки остаются."""
+        """Убрать все задачи программы из системного планировщика, в том числе пробуждения агента и сторожа. Только
+        по слову человека. Само расписание не вернётся, пока он не попросит (schedule_install)."""
         return domain(schedule.remove)
 
     @mcp.tool()
     def schedule_register(agent: str, name: str, cadence: str, purpose: str) -> dict:
         """Сообщить hrs о задаче по расписанию, которую ты создал своими средствами (agent: claude_code | codex |
-        other). Так человек видит её в schedule_status и может попросить остановить."""
+        grok | hermes | openclaw | other). Так человек видит её в schedule_status и может попросить остановить."""
         return domain(lambda: schedule_core.register_agent_task(store, cid, agent, name, cadence, purpose))
 
     @mcp.tool()

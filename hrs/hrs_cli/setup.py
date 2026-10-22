@@ -10,6 +10,8 @@
 - Grok Build: a `[mcp_servers.hrshturman]` block appended to ~/.grok/config.toml.
 - Hermes: an `hrshturman` entry under `mcp_servers` in ~/.hermes/config.yaml.
 - OpenClaw: `openclaw mcp set hrshturman <json>` (an `mcp.servers` entry in OpenClaw config).
+- Schedule: the regular tasks, the agent's three wake-ups a day and the hourly watch go into the system
+  scheduler at once (schedule.ensure); the person does not have to ask.
 - Skill: the installer skill folder is copied to ~/.agents/skills (also read by DeepSeek Harness and other
   agents), to ~/.claude/skills unless it came with the plugin, and to the skills folders of Grok Build,
   Hermes and OpenClaw when they are on this machine.
@@ -234,4 +236,14 @@ def run(skill_dir: str | None = None, from_plugin: bool = False) -> dict:
         homes = {"grok": grok_home(), "hermes": hermes_home(), "openclaw": openclaw_home()}
         targets += [homes[agent] / "skills" for agent in ("grok", "hermes", "openclaw") if agent in found]
         report["skills"] = install_skill(Path(skill_dir), targets)
+    report["schedule"] = setup_schedule()
     return report
+
+
+def setup_schedule() -> dict:
+    """Switch the schedule on right away: the person never has to ask for it (schedule.py)."""
+    from . import schedule
+    try:
+        return schedule.ensure()
+    except Exception as exc:  # noqa: BLE001 - a scheduler hiccup never fails the install
+        return {"error": str(exc)}

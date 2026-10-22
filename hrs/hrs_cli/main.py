@@ -14,7 +14,7 @@
   jbs ui [--view intake|progress] [--no-open]   the candidate's page in a browser (127.0.0.1, one-time link)
   jbs selftest [--library DIR [--include DEST=SRC]] [--json]   contract check of the methodology bundle
   jbs schedule install|remove|status   regular tasks in the system scheduler (launchd, Task Scheduler, systemd)
-  jbs schedule run <task>              run one task now: license, collect, digest, reminders
+  jbs schedule run <task>              run one task now: license, collect, digest, reminders, wake, watch
   jbs schedule set <task> [--time HH:MM ...] [--on|--off]   when a task runs
   jbs self-update [--check|--status]   install a newer hrs now (it also updates itself daily and after the agent closes)
 """
@@ -35,6 +35,19 @@ def _print(obj) -> None:
 def _version() -> str:
     from .license import client_version
     return client_version()
+
+
+def schedule_check() -> None:
+    """When the agent starts hrs: put back the scheduled tasks that went missing, in the background."""
+    import threading
+
+    def go():
+        from . import schedule
+        try:
+            schedule.ensure()
+        except Exception:  # noqa: BLE001 - the agent's session never waits for or fails on the scheduler
+            pass
+    threading.Thread(target=go, daemon=True).start()
 
 
 def main(argv=None) -> int:
@@ -88,9 +101,9 @@ def main(argv=None) -> int:
     ssub.add_parser("remove", help="убрать задачи из системного планировщика")
     ssub.add_parser("status", help="расписание, последние запуски, задачи агентов")
     p = ssub.add_parser("run", help="выполнить задачу сейчас")
-    p.add_argument("task", choices=["license", "collect", "digest", "reminders"])
+    p.add_argument("task", choices=["license", "collect", "digest", "reminders", "wake", "watch"])
     p = ssub.add_parser("set", help="изменить время или выключить задачу")
-    p.add_argument("task", choices=["license", "collect", "digest", "reminders"])
+    p.add_argument("task", choices=["license", "collect", "digest", "reminders", "wake", "watch"])
     p.add_argument("--time", action="append", help="HH:MM, можно несколько")
     p.add_argument("--on", dest="enabled", action="store_true", default=None)
     p.add_argument("--off", dest="enabled", action="store_false")
@@ -194,6 +207,7 @@ def main(argv=None) -> int:
         from . import selfupdate
         from .server import build
         selfupdate.hold()
+        schedule_check()
         server = build()
         if args.http:
             server.run("streamable-http", host="127.0.0.1", port=args.port)

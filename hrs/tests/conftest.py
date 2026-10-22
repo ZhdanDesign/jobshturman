@@ -20,6 +20,8 @@ def _file_keystore(monkeypatch):
     monkeypatch.delenv("HRS_KEYCHAIN", raising=False)
     # Never the production key server: anything not given a test client fails locally.
     monkeypatch.setenv("HRS_KEY_SERVER", "http://127.0.0.1:9")
+    # Never the real launchd, Task Scheduler or systemd: schedule tests switch this on with a fake runner.
+    monkeypatch.setenv("HRS_SCHEDULE", "off")
 
 
 @pytest.fixture(autouse=True)

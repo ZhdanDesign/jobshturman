@@ -17,12 +17,21 @@ TASKS = {
     "collect": "собрать новые вакансии по включённым источникам",
     "digest": "сводка: новые вакансии, что ждёт решения, воронка",
     "reminders": "напомнить о том, что ждёт человека",
+    "wake": "разбудить агента: утром, днём и вечером он сам продолжает работу, работодателям ничего не отправляет",
+    "watch": "сторож: раз в час проверить, что задачи стоят в планировщике, вернуть пропавшие и догнать пропущенные",
 }
+# Tasks the watch never repeats on its own: reminders fire several times a day anyway, the watch is itself.
+NO_CATCH_UP = ("reminders", "watch")
 DEFAULTS = {
     "tasks": {"license": {"enabled": True, "times": ["07:30"]},
               "collect": {"enabled": True, "times": ["08:00"]},
               "digest": {"enabled": True, "times": ["08:30"]},
-              "reminders": {"enabled": True, "times": ["12:00", "16:00", "19:00"]}},
+              "reminders": {"enabled": True, "times": ["12:00", "16:00", "19:00"]},
+              "wake": {"enabled": True, "times": ["09:30", "14:00", "19:30"]},
+              "watch": {"enabled": True, "times": [], "every_minutes": 60}},
+    # False after the person asked to take the tasks out of the system scheduler: nothing puts them back
+    # until they ask again (schedule_install).
+    "system_scheduler": True,
     "quiet_hours": {"from": "21:00", "to": "09:00"},
     "max_per_day": 3,
     "agent_tasks": [],
@@ -31,7 +40,7 @@ DEFAULTS = {
     "last_runs": {},
     "shown_log": [],  # when notifications were shown, for the daily limit
 }
-AGENTS = {"claude_code", "codex", "other"}
+AGENTS = {"claude_code", "codex", "grok", "hermes", "openclaw", "other"}
 SNOOZE_MAX_HOURS = 24 * 14
 
 
@@ -72,6 +81,8 @@ def set_task(store, candidate_id, task, times=None, enabled=None, actor="candida
     """Change when a task of hrs runs or switch it off. Only at the person's word."""
     if task not in TASKS:
         raise DomainError("invalid_schema", f"task must be one of {list(TASKS)}")
+    if times is not None and task == "watch":
+        raise DomainError("invalid_schema", "the watch runs every hour; it can only be switched on or off")
     if times is not None:
         if not isinstance(times, list) or not 1 <= len(times) <= 6:
             raise DomainError("invalid_schema", "times: 1 to 6 values HH:MM")
@@ -82,6 +93,8 @@ def set_task(store, candidate_id, task, times=None, enabled=None, actor="candida
         entry = dict(tasks[task])
         if times is not None:
             entry["times"] = times
+        if task == "wake":
+            entry["agreed"] = True  # the person chose the hours: the agent stops asking
         if enabled is not None:
             entry["enabled"] = bool(enabled)
         return dict(data, tasks={**tasks, task: entry})
@@ -138,6 +151,10 @@ def unregister_agent_task(store, candidate_id, agent, name, actor="agent"):
             raise DomainError("not_found", f"agent task {agent}:{name}")
         return dict(data, agent_tasks=left)
     return _save(store, candidate_id, change, actor, "agent_task_removed")
+
+
+def set_system_scheduler(store, candidate_id, on, actor="candidate_via_agent"):
+    return _save(store, candidate_id, lambda d: dict(d, system_scheduler=bool(on)), actor, "schedule_changed")
 
 
 def record_run(store, candidate_id, task, result, actor="scheduler"):
@@ -276,6 +293,9 @@ def _quiet(settings, local):
     start, end = settings["quiet_hours"]["from"], settings["quiet_hours"]["to"]
     t = local.strftime("%H:%M")
     return start <= t or t < end if start > end else start <= t < end
+
+
+quiet = _quiet
 
 
 def pick_notification(store, candidate_id, at=None, license_info=None, actor="scheduler"):
