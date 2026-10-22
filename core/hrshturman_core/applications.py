@@ -6,7 +6,7 @@ collector/CONTRACT.md converts into it. This module never parses sources.
 """
 from datetime import datetime, timedelta, timezone
 
-from .common import DomainError, check_id, digest, parse_time, reject_secrets
+from .common import DomainError, check_id, digest, parse_time, redact_secrets, reject_secrets
 from .workspace import get_candidate
 
 VACANCY_FIELDS = {"source", "external_id", "url", "title", "company", "text", "published_at", "collected_at",
@@ -34,7 +34,7 @@ def import_vacancies(store, candidate_id, items, track_id="main", actor="collect
     for item in items:
         if not isinstance(item, dict) or not {"source", "external_id", "title"} <= set(item) or set(item) - VACANCY_FIELDS:
             raise DomainError("invalid_schema", f"vacancy fields: required source, external_id, title; allowed {sorted(VACANCY_FIELDS)}")
-        reject_secrets(item)
+        item = redact_secrets(item)  # a vacancy is public text: one showing a token example must not stop the sync
         source = check_id(str(item["source"]).strip().casefold(), "source")
         external_id = str(item["external_id"]).strip()
         if not external_id or len(external_id) > 256:

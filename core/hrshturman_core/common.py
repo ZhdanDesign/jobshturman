@@ -53,6 +53,17 @@ def reject_secrets(value):
         raise DomainError("restricted_disclosure", "Secret-like value is not permitted")
 
 
+def redact_secrets(value):
+    """Public text (a vacancy) may show a key or token as an example: hide that part instead of refusing."""
+    if isinstance(value, dict):
+        return {key: redact_secrets(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [redact_secrets(item) for item in value]
+    if isinstance(value, str):
+        return SECRET_TEXT.sub("[скрыто]", value)
+    return value
+
+
 def check_id(value, name):
     if not isinstance(value, str) or not ID_RE.fullmatch(value):
         raise DomainError("invalid_schema", f"Invalid {name}")

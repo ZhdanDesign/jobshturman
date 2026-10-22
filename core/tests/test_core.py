@@ -8,6 +8,7 @@ from pathlib import Path
 from hrshturman_core import DomainError, Store
 from hrshturman_core import applications as apps
 from hrshturman_core import intake, report, resume
+from hrshturman_core.common import canonical
 from hrshturman_core.workspace import create_candidate
 
 PAST = "2026-01-01T10:00:00+00:00"
@@ -192,6 +193,20 @@ class ApplicationTests(Base):
         after = {a["object_id"]: a for a in apps.list_applications(self.store, "cand-a")}[app["object_id"]]
         self.assertEqual(after["state"], "draft_ready")
         self.assertEqual(after["material"]["hash"], app["material"]["hash"])
+
+    def test_a_vacancy_mentioning_a_secret_does_not_stop_the_import(self):
+        """A vacancy is public text: one that shows a key or token example (an AI/LLM lead role did) must not
+        fail the whole sync. The secret-like part is hidden, the rest comes in."""
+        leaky = {"source": "hh", "external_id": "202", "title": "AI / LLM SDLC Lead",
+                 "text": "Настроить доступ: api_key=sk-abcdef1234567890XYZ и Bearer abcdefghijklmnop",
+                 "url": "https://example.ru/v/202?access_token=qwerty12345"}
+        counts = apps.import_vacancies(self.store, "cand-a", [*self.VAC, leaky])
+        self.assertEqual(counts["added"], 3)
+        card = {a["vacancy"]["external_id"]: a for a in apps.list_applications(self.store, "cand-a")}["202"]
+        stored = canonical(card["vacancy"])
+        for secret in ("sk-abcdef1234567890XYZ", "abcdefghijklmnop", "qwerty12345"):
+            self.assertNotIn(secret, stored)
+        self.assertIn("Настроить доступ", card["vacancy"]["text"])
 
     def test_no_final_score_without_full_text(self):
         tg = self.imported()["chan-1:55"]
