@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+import subprocess
 import tarfile
 import zipfile
 
@@ -92,15 +93,18 @@ def test_start_downloads_and_hands_over_to_the_runner(tmp_path, monkeypatch):
     assert open(job["runner"], encoding="utf-8").read().startswith('"""Installs a downloaded hrs release')
 
 
-def test_waits_while_the_agent_holds_hrs(tmp_path, monkeypatch):
+def test_windows_waits_while_the_agent_holds_hrs(tmp_path, monkeypatch):
     home(tmp_path, monkeypatch)
-    selfupdate.pids_dir().mkdir(parents=True)
-    (selfupdate.pids_dir() / f"{os.getppid()}.pid").write_text("")  # a live process: the test runner's parent
+    monkeypatch.setattr(update_runner, "IN_PLACE", False)
+    held = update_runner.claim(selfupdate.pids_dir(), 999999998)  # a live hrs holds its lock
     (selfupdate.pids_dir() / "999999999.pid").write_text("")  # a dead one is cleaned up
     spawned = []
-    out = selfupdate.start(http=github(), spawn=spawned.append)
-    assert out["pending"] and not spawned
-    assert sorted(p.name for p in selfupdate.pids_dir().iterdir()) == [f"{os.getppid()}.pid"]
+    try:
+        out = selfupdate.start(http=github(), spawn=spawned.append)
+        assert out["pending"] and not spawned
+        assert sorted(p.name for p in selfupdate.pids_dir().iterdir()) == ["999999998.pid"]
+    finally:
+        held.close()
 
 
 def _job(tmp_path):
@@ -149,3 +153,55 @@ def test_agent_tells_the_person_once(tmp_path, monkeypatch):
     first = status()
     assert first["hrs_updated"]["message"] == f"JobShturman обновился до версии 0.6.0. Что нового: {NOTES}"
     assert "hrs_updated" not in status()
+
+
+def test_a_reused_pid_of_another_program_does_not_block_the_update(tmp_path):
+    """The pid of an hrs that died long ago now belongs to another program (on the owner's Mac a system
+    daemon): its file is stale and goes, or the update waits forever."""
+    if os.name == "nt":
+        return
+    other = subprocess.Popen(["sleep", "30"])
+    try:
+        folder = tmp_path / "running"
+        folder.mkdir()
+        (folder / f"{other.pid}.pid").write_text("")
+        assert update_runner.running(folder) == []
+        assert not list(folder.iterdir())
+    finally:
+        other.kill()
+
+
+def test_a_running_hrs_is_known_by_the_lock_on_its_pid_file(tmp_path):
+    folder = tmp_path / "running"
+    held = update_runner.claim(folder, 999999999)  # the pid itself proves nothing: the lock does
+    assert update_runner.running(folder) == [999999999]
+    held.close()
+    assert update_runner.running(folder) == [] and not list(folder.iterdir())
+
+
+def test_mac_and_linux_update_while_the_agent_keeps_hrs_open(tmp_path, monkeypatch):
+    """Claude Desktop and Codex keep `hrs serve` open all day: waiting for them to close means never.
+    On macOS and Linux the new release goes in next to the running one and works from the next start;
+    Windows locks the running files, so there the update still waits."""
+    home(tmp_path, monkeypatch)
+    held = update_runner.claim(selfupdate.pids_dir(), 999999999)
+    try:
+        monkeypatch.setattr(update_runner, "IN_PLACE", True)
+        out = selfupdate.start(http=github(), spawn=lambda job: None)
+        assert out["started"]
+        calls = []
+        job = _job(tmp_path) | {"pids": str(selfupdate.pids_dir())}
+        result = update_runner.apply(job, run=lambda cmd, timeout=600: calls.append(cmd) or (0, "hrs 0.6.0"))
+        assert result["ok"] and calls
+        monkeypatch.setattr(update_runner, "IN_PLACE", False)
+        assert selfupdate.start(http=github(), spawn=lambda job: None)["pending"]
+        assert update_runner.apply(job, run=lambda cmd, timeout=600: (0, ""))["error"] == "busy"
+    finally:
+        held.close()
+
+
+def test_serve_loads_all_its_code_before_an_update_can_replace_it(monkeypatch):
+    import sys
+    monkeypatch.delitem(sys.modules, "hrs_cli.wake", raising=False)
+    selfupdate.preload()
+    assert "hrs_cli.wake" in sys.modules and "hrs_cli.__main__" not in sys.modules

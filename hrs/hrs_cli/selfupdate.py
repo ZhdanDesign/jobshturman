@@ -1,7 +1,9 @@
 """hrs updates itself: the person never reinstalls by hand.
 
 When: once a day in the scheduled `license` task, and when the agent starts `hrs serve` (the check runs in the
-background; the install waits until the agent closes). The newest release on GitHub is compared with this hrs.
+background). On macOS and Linux the install goes in while the agent keeps hrs open and works from its next
+start; on Windows it waits until the agent closes (see update_runner). The newest release on GitHub is
+compared with this hrs.
 
 How: the same way as the installer. The new and the current release wheels and the source of the new release
 are downloaded here, then update_runner.py, started with uv's own Python outside the hrs environment, waits
@@ -192,7 +194,7 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
     if info.get("error") or not info["available"]:
         return info
     busy = update_runner.running(pids_dir(), exclude=os.getpid())
-    if busy:
+    if busy and not update_runner.IN_PLACE:
         return info | {"pending": "JobShturman открыт у агента: обновлю, когда агент закроется"}
     try:
         job = prepare(info, http=http)
@@ -204,19 +206,36 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
 
 # --- hrs serve: register while running, check on start, install after close ---
 
+PACKAGES = ("hrs_cli", "hrshturman_core", "hrshturman_local", "hrs_collector")
+_held = []
+
+
+def preload() -> None:
+    """Import all of our code now: an update may replace the files under a running `hrs serve`, and a module
+    imported later would then come from the new release and not match the rest."""
+    import importlib
+    import pkgutil
+    for name in PACKAGES:
+        package = _quiet(lambda name=name: importlib.import_module(name))
+        for module in pkgutil.walk_packages(getattr(package, "__path__", []), f"{name}."):
+            if not module.name.endswith("__main__"):
+                _quiet(lambda module=module: importlib.import_module(module.name))
+
+
 def hold() -> None:
     """Called by `hrs serve` and `hrs ui`: mark this process as using hrs, check for a newer one in the
     background and, when this process ends, install it if nothing else holds hrs."""
     if disabled():
         return
-    pid_file = pids_dir() / f"{os.getpid()}.pid"
-    pid_file.parent.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text("", encoding="utf-8")
+    preload()
+    held = update_runner.claim(pids_dir(), os.getpid())
+    _held.append(held)
     threading.Thread(target=lambda: _quiet(check), daemon=True).start()
 
     def release():
         # The download takes a while and the agent may not wait for it: a separate `hrs self-update` does it.
-        pid_file.unlink(missing_ok=True)
+        held.close()
+        Path(held.name).unlink(missing_ok=True)
         info = _read(state_file()).get("latest") or {}
         if version_tuple(info.get("version", "")) > version_tuple(current()) \
                 and not update_runner.running(pids_dir(), exclude=os.getpid()):

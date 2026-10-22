@@ -28,9 +28,18 @@ DAILY_SEND_LIMIT = 40
 # Between two browser applications, so the platform does not see a robot. HRS_SEND_PAUSE only for tests.
 MIN_PAUSE_SECONDS = int(os.environ.get("HRS_SEND_PAUSE", "60"))
 
-INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике.
-Приложение хранит факты, резюме, карточки откликов и воронку; ты интервьюируешь, пишешь черновики и оцениваешь вакансии.
-Правила:
+# What every agent reads first. Claude Code cuts server instructions at about 2 KB, so only the rules that must
+# never be missed are here; how to work with the tools is in GUIDE (the work_guide tool).
+INSTRUCTIONS = PRODUCT_NAME + """: локальный учёт поиска работы кандидата по методике. Ты интервьюируешь, пишешь черновики
+и оцениваешь вакансии; программа хранит факты, резюме, отклики и воронку.
+- В начале сессии вызови agent_rules (главные правила, они важнее этого текста) и work_guide (как работать
+  с инструментами программы), затем status_report.
+- Без пауз: после ответа человека сразу следующий шаг; всегда говори, что дальше.
+- Не выдумывай факты и цифры; утверждения резюме ссылаются на fact_id.
+- Подтверждения, решения по вакансиям, разрешения и отметки об отправке — только после явных слов кандидата
+  (исключение — автоотклики, которые он сам включил). Без его разрешения работодателям ничего не отправляй.
+- state_version_conflict: перечитай объект и повтори с новой версией."""
+GUIDE = """Как работать с инструментами JobShturman.
 - Начни с status_report: он показывает этап, следующий шаг и блокеры.
 - Без пауз: после ответа человека сразу делай следующий шаг. Останавливайся только когда этап закончен,
   нужен ответ или подтверждение человека или работа на сегодня завершена, и каждый раз говори, что дальше.
@@ -154,14 +163,15 @@ def stage_text(library, stage_id) -> str:
     return methodology.stage_text(library, stage_id)
 
 
-def build_server(settings, collector=None, extra_instructions="", library=None):
+def build_server(settings, collector=None, extra_instructions="", library=None, instructions=None, extra_guide=""):
     """collector: a CollectorClient-compatible object; by default the HTTP client from settings.
-    library: an object with names() and read(name); by default the files in settings.library."""
+    library: an object with names() and read(name); by default the files in settings.library.
+    instructions replaces INSTRUCTIONS; extra_guide is added to the work_guide text."""
     library = library or FileLibrary(settings.library)
     store = Store(settings.db_path).init()
     create_candidate(store, settings.candidate_id, settings.timezone, actor="installer")
     cid = settings.candidate_id
-    mcp = MCPServer("hrshturman", instructions=INSTRUCTIONS + extra_instructions, log_level="WARNING")
+    mcp = MCPServer("hrshturman", instructions=(instructions or INSTRUCTIONS) + extra_instructions, log_level="WARNING")
 
     def tool(fn):
         return mcp.tool()(tool_errors(fn))
@@ -518,6 +528,12 @@ def build_server(settings, collector=None, extra_instructions="", library=None):
     def procedure(stage_id: str) -> str:
         """Процедура этапа методики по номеру или id."""
         return stage_text(library, stage_id)
+
+    @tool
+    def work_guide() -> str:
+        """Как работать с инструментами JobShturman: анкета, вакансии и ранг, отклики и браузер, обновления,
+        где отвечает человек, расписание. Прочитай в начале сессии вместе с agent_rules."""
+        return GUIDE + extra_guide
 
     @tool
     def product_help(topic: str | None = None) -> dict:

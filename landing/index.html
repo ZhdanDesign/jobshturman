@@ -244,7 +244,7 @@
           <div class="duo-col col-agent">
             <div class="section-head">
               <h2 id="agent-title">Агент помогает вести поиск каждый день</h2>
-              <p>Это помощник на вашем компьютере. Он работает в Claude Code или Codex, проверен на macOS, версия для Windows в тестировании.</p>
+              <p>Это помощник на вашем компьютере. Он работает в Claude Code или Codex на macOS и Windows.</p>
             </div>
             <ul class="cards">
               <li><h3>Находит подходящие вакансии</h3><p>Собирает вакансии из доступных вам источников, сравнивает с вашими пожеланиями и объясняет, какие стоит рассмотреть.</p></li>
@@ -281,7 +281,7 @@
           <div class="need">
             <h3>Что нужно до начала</h3>
             <ol class="need-list">
-              <li><b>Компьютер на macOS</b><span>Версия для Windows в тестировании.</span></li>
+              <li><b>Компьютер на macOS или Windows</b><span>Всё работает на обеих системах.</span></li>
               <li><b>Codex или Claude Code</b><span>Приложение от OpenAI или Anthropic, установленное на этом компьютере.</span></li>
               <li><b>Платная подписка на ИИ</b><span>ChatGPT Plus для Codex или Claude Pro для Claude Code, от $20 в месяц. Оплачивается отдельно, в вашем аккаунте. Для более интенсивной работы подойдут тарифы выше.</span></li>
               <li><b>Ключ <span data-brand>JobShturman</span></b><span>Приходит после оплаты пакета. До покупки проверим ваш компьютер и подключения.</span></li>
@@ -461,10 +461,18 @@
           <div class="terminal-block">
             <p class="terminal-lead">Привычнее Терминал? Та же установка одной командой:</p>
             <div class="terminal copy">
-              <div class="terminal-bar" aria-hidden="true"><i></i><i></i><i></i><span>Терминал</span></div>
+              <div class="terminal-bar" aria-hidden="true"><i></i><i></i><i></i><span>macOS · Терминал</span></div>
               <div class="terminal-body">
                 <span class="terminal-prompt" aria-hidden="true">$</span>
                 <code>curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh</code>
+                <button type="button" class="button small copy-btn">Скопировать</button>
+              </div>
+            </div>
+            <div class="terminal copy">
+              <div class="terminal-bar" aria-hidden="true"><i></i><i></i><i></i><span>Windows · PowerShell</span></div>
+              <div class="terminal-body">
+                <span class="terminal-prompt" aria-hidden="true">&gt;</span>
+                <code>irm https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.ps1 | iex</code>
                 <button type="button" class="button small copy-btn">Скопировать</button>
               </div>
             </div>
@@ -593,7 +601,7 @@
             <div>
               <h3>Что подготовить</h3>
               <ul>
-                <li>Компьютер на macOS (Windows в тестировании) и Claude Code или Codex. Подписка на ИИ оплачивается отдельно; для более интенсивной работы подойдут тарифы выше.</li>
+                <li>Компьютер на macOS или Windows и Claude Code или Codex. Подписка на ИИ оплачивается отдельно; для более интенсивной работы подойдут тарифы выше.</li>
                 <li>Ваши материалы: резюме, даты, должности, цифры — и время на работу с агентом.</li>
                 <li>Около дня на настройку вместе с агентом.</li>
                 <li>Резюме, письма и отклики хранятся в рабочей папке на вашем компьютере.</li>
@@ -712,7 +720,7 @@
             <details><summary>Вы гарантируете трудоустройство?</summary><p>Нет. Решение о найме принимает работодатель.</p></details>
             <details><summary>Можно посмотреть агента до покупки?</summary><p>Да, Алексей покажет его на созвоне.</p></details>
             <details><summary>Нужно ли уметь программировать?</summary><p>Нет. Установка идёт по инструкции, а в сопровождении Алексей поможет.</p></details>
-            <details><summary>Что нужно для работы?</summary><p>Компьютер на macOS и Claude Code или Codex; версия для Windows в тестировании. Подписка на ИИ оплачивается отдельно. Для более интенсивной работы подойдут тарифы выше.</p></details>
+            <details><summary>Что нужно для работы?</summary><p>Компьютер на macOS или Windows и Claude Code или Codex. Подписка на ИИ оплачивается отдельно. Для более интенсивной работы подойдут тарифы выше.</p></details>
             <details><summary>Агент сам отправляет отклики?</summary><p>Да, но только на вакансии, которые вы выбрали. Он откликается через браузер на вашем компьютере, в ваших аккаунтах, и прикладывает резюме под вакансию. Темп ограничен, чтобы площадки не приняли вас за робота; на проверке «я не робот» или входе агент останавливается и зовёт вас.</p></details>
             <details><summary>Сколько времени это займёт?</summary><p>Настройка — примерно день диалога с агентом, больше всего уходит на сбор материалов о себе. Потом около 15 минут в день плюс разговоры с работодателями.</p></details>
             <details><summary>Где хранятся мои данные?</summary><p>На вашем компьютере. Резюме, факты, вакансии и отклики не уходят на наш сервер. Сервер ключей знает только ключ, случайный номер установки и номер заказа. Текст обрабатывает модель в вашем Claude Code или Codex на условиях её поставщика.</p></details>
