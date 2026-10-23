@@ -301,6 +301,20 @@ def test_an_important_methodology_installs_itself_and_is_explained_once(keys, tm
     assert "methodology_updated" not in license.refresh(force=True, http=keys)
 
 
+def test_an_important_methodology_published_after_a_check_arrives_within_hours(keys, tmp_path):
+    """Without the system scheduler (a cloud machine) only the agent's license_status asks the server."""
+    license.login(issue(keys)["key"], http=keys)
+    publish_next(keys, tmp_path, "0.4.0.t2", "Исправлена ошибка в отборе", important=True)
+    state = license.load()
+    state["checked_at"] = iso(now() - timedelta(minutes=30))
+    license.save(state)
+    assert license.refresh(http=keys)["bundle_version"] == "0.4.0.t1"  # just asked: no new request
+    state = license.load()
+    state["checked_at"] = iso(now() - timedelta(hours=4))
+    license.save(state)
+    assert license.refresh(http=keys)["bundle_version"] == "0.4.0.t2"
+
+
 def test_stages_open_one_by_one_in_order_without_a_daily_limit(keys, monkeypatch):
     """A request like «extract the whole methodology» gets one stage, not the bundle."""
     monkeypatch.setattr(license, "GATED", True)

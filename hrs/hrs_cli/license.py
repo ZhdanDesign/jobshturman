@@ -38,7 +38,7 @@ DEFAULT_SERVER = "https://tools.owai.ru/jobshturman/keys"
 OLD_SERVERS = ("https://tools.owai.ru/hrshturman/keys",)
 # Public key of the production bundle signing key (hrs-keys signing-key on the server).
 PUBLIC_KEYS: tuple[str, ...] = ("g0+l6EZh3voBDLJApGDmDOIPlaE7gXG0leEo/HzJsZ4=",)
-CHECK_EVERY = timedelta(hours=24)
+CHECK_EVERY = timedelta(hours=3)  # a release or an important methodology reaches the agent the same day
 OFFLINE_GRACE = timedelta(days=7)
 WARN_BEFORE = timedelta(days=1)
 TIMEOUT = 15.0
@@ -197,7 +197,7 @@ def login(key: str, server: str | None = None, http: httpx.Client | None = None)
 
 
 def refresh(force: bool = False, http: httpx.Client | None = None) -> dict:
-    """Ask the server about the key if the last answer is older than a day. Network errors are not fatal."""
+    """Ask the server about the key if the last answer is older than CHECK_EVERY. Network errors are not fatal."""
     state = load()
     if not state:
         return view()

@@ -50,6 +50,35 @@ def schedule_check() -> None:
     threading.Thread(target=go, daemon=True).start()
 
 
+def exit_with_parent(interval: float = 30, getppid=None, stop=None, rounds=None) -> None:
+    """`hrs serve` ends when the agent that started it is gone. Otherwise an orphan keeps the old code in memory
+    after an update, and the agent's next start sees two hrs. Windows does not hand orphans to another parent,
+    and there the update waits for every hrs to close anyway. rounds is for tests: check in place, no thread."""
+    import os
+    import threading
+    import time
+    if os.name == "nt":
+        return
+    getppid = getppid or os.getppid
+    stop = stop or os._exit
+    first = getppid()
+    if first == 1:  # started by launchd or systemd, not by an agent
+        return
+
+    def watch():
+        n = 0
+        while rounds is None or n < rounds:
+            n += 1
+            time.sleep(interval)
+            if getppid() != first:
+                stop(0)
+                return
+    if rounds is not None:
+        watch()
+    else:
+        threading.Thread(target=watch, daemon=True, name="hrs-parent").start()
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["collect"]:
@@ -207,6 +236,7 @@ def main(argv=None) -> int:
         from . import selfupdate
         from .server import build
         selfupdate.hold()
+        exit_with_parent()
         schedule_check()
         server = build()
         if args.http:
