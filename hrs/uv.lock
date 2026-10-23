@@ -556,7 +556,7 @@ dev = [
 
 [[package]]
 name = "hrshturman"
-version = "0.9.4.2"
+version = "0.9.4.3"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

@@ -7,6 +7,7 @@ import os
 import subprocess
 import tarfile
 import zipfile
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from hrs_cli import paths, selfupdate, update_runner
@@ -205,3 +206,40 @@ def test_serve_loads_all_its_code_before_an_update_can_replace_it(monkeypatch):
     monkeypatch.delitem(sys.modules, "hrs_cli.wake", raising=False)
     selfupdate.preload()
     assert "hrs_cli.wake" in sys.modules and "hrs_cli.__main__" not in sys.modules
+
+
+def test_a_release_out_last_night_is_installed_by_the_morning_task(tmp_path, monkeypatch):
+    """0.9.4.2 came out at 21:27; the morning task trusted yesterday's answer from GitHub (asked under 20 hours
+    ago) and kept 0.9.4.1. The daily task always asks GitHub, and the hourly watch asks every few hours."""
+    from hrs_cli import schedule
+    home(tmp_path, monkeypatch)
+    old = {"latest": {"tag": "v0.5.0", "version": "0.5.0", "notes": ""},
+           "checked_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(timespec="seconds")}
+    selfupdate._write(selfupdate.state_file(), old)
+    assert not selfupdate.check(http=github())["available"]  # a recent answer is trusted...
+    started = []
+    monkeypatch.setattr(selfupdate, "start", lambda force=False, **kw: started.append(force) or {})
+    monkeypatch.setattr(schedule, "catch_up", lambda settings, now=None: [])
+    monkeypatch.setattr(schedule, "ensure", lambda **kw: {})
+    schedule.run("license")
+    schedule.run("watch")
+    assert started == [True, False]
+    assert selfupdate.CHECK_EVERY <= timedelta(hours=3)
+
+
+def test_a_failed_update_is_not_retried_every_hour(tmp_path, monkeypatch):
+    home(tmp_path, monkeypatch)
+    selfupdate._write(selfupdate.result_file(), {"ok": False, "to": "0.6.0", "error": "install",
+                                                 "at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+    spawned = []
+    assert selfupdate.start(http=github(), spawn=spawned.append).get("skipped") == "failed_recently"
+    assert selfupdate.start(force=True, http=github(), spawn=spawned.append)["started"]
+
+
+def test_the_agent_hears_to_restart_when_its_hrs_is_older_than_the_installed_one(tmp_path, monkeypatch):
+    """On macOS and Linux the update goes in under a running `hrs serve`; that serve still runs the old code."""
+    home(tmp_path, monkeypatch, version="0.6.0")
+    monkeypatch.setattr(selfupdate, "_started", "0.5.0")
+    selfupdate._write(selfupdate.result_file(), {"ok": True, "from": "0.5.0", "to": "0.6.0", "notes": NOTES})
+    message = selfupdate.news()["hrs_updated"]["message"]
+    assert "перезапустите" in message.replace(" ", " ")

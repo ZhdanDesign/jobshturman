@@ -1,7 +1,7 @@
 """hrs updates itself: the person never reinstalls by hand.
 
-When: once a day in the scheduled `license` task, and when the agent starts `hrs serve` (the check runs in the
-background). On macOS and Linux the install goes in while the agent keeps hrs open and works from its next
+When: the scheduled `license` task asks GitHub every morning, the hourly `watch` task and the start of `hrs serve`
+at most every CHECK_EVERY (the check runs in the background). On macOS and Linux the install goes in while the agent keeps hrs open and works from its next
 start; on Windows it waits until the agent closes (see update_runner). The newest release on GitHub is
 compared with this hrs.
 
@@ -29,7 +29,8 @@ from . import license, paths, setup, update_runner
 
 REPO = "ZhdanDesign/jobshturman"
 ASSET = "jobshturman-wheels.zip"
-CHECK_EVERY = timedelta(hours=20)
+CHECK_EVERY = timedelta(hours=3)
+RETRY_AFTER = timedelta(hours=24)  # a failed install of the same version is not retried every hour
 TIMEOUT = 60
 
 
@@ -193,6 +194,10 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
     info = check(force=force, http=http)
     if info.get("error") or not info["available"]:
         return info
+    last = _read(result_file())
+    if not force and not last.get("ok") and last.get("to") == info["latest"] and last.get("at") \
+            and datetime.now(timezone.utc) - datetime.fromisoformat(last["at"]) < RETRY_AFTER:
+        return info | {"skipped": "failed_recently", "last_error": last.get("error")}
     busy = update_runner.running(pids_dir(), exclude=os.getpid())
     if busy and not update_runner.IN_PLACE:
         return info | {"pending": "JobShturman открыт у агента: обновлю, когда агент закроется"}
@@ -206,6 +211,7 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
 
 # --- hrs serve: register while running, check on start, install after close ---
 
+_started = None  # the version this `hrs serve` runs; an update installed under it works from the next start
 PACKAGES = ("hrs_cli", "hrshturman_core", "hrshturman_local", "hrs_collector")
 _held = []
 
@@ -227,6 +233,8 @@ def hold() -> None:
     background and, when this process ends, install it if nothing else holds hrs."""
     if disabled():
         return
+    global _started
+    _started = current()
     preload()
     held = update_runner.claim(pids_dir(), os.getpid())
     _held.append(held)
@@ -260,9 +268,12 @@ def news() -> dict:
     if not result.get("ok") or result.get("to") != current() or state.get("told") == result["to"]:
         return {}
     notes = result.get("notes") or ""
-    return {"hrs_updated": {"from": result["from"], "to": result["to"], "notes": notes,
+    restart = _started is not None and _started != result["to"]
+    return {"hrs_updated": {"from": result["from"], "to": result["to"], "notes": notes, "restart_agent": restart,
                             "message": f"JobShturman обновился до версии {result['to']}."
-                                       + (f" Что нового: {notes}" if notes else "")}}
+                                       + (f" Что нового: {notes}" if notes else "")
+                                       + (" Чтобы новая версия заработала, перезапустите агента: закройте его"
+                                          "\u00a0и\u00a0откройте снова." if restart else "")}}
 
 
 def mark_told() -> None:

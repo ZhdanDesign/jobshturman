@@ -7,7 +7,7 @@
 
 Times are the computer's local time. Every task runs `python -m hrs_cli schedule run <task>` with the
 same interpreter and data folder as the install. Nothing here applies or writes to an employer.
-The daily `license` task also installs a newer hrs if one is out (see selfupdate.py).
+The daily `license` task and the hourly `watch` also install a newer hrs if one is out (see selfupdate.py).
 
 The schedule switches itself on: `jbs setup` (the installer and every self-update) and the start of
 `jbs serve` call ensure(), which puts back whatever is missing. `wake` starts the agent three times a day
@@ -330,7 +330,12 @@ def catch_up(settings, now=None, runner=None):
 
 def _task(task, s, store, settings, paused, collector, now):
     if task == "watch":
-        return {"ensure": ensure(skip=("watch",)), "caught_up": catch_up(settings, now=now)}
+        from . import selfupdate
+        try:
+            update = selfupdate.start()
+        except Exception as exc:  # noqa: BLE001 - a failed update never stops the watch
+            update = {"error": str(exc)}
+        return {"ensure": ensure(skip=("watch",)), "caught_up": catch_up(settings, now=now), "self_update": update}
     if paused and task != "license":
         result = {"skipped": "paused"}
     elif task == "wake":
@@ -344,7 +349,7 @@ def _task(task, s, store, settings, paused, collector, now):
             result["notified"] = notify(PRODUCT_NAME, info["warning"])
         from . import selfupdate
         try:
-            result["self_update"] = selfupdate.start()
+            result["self_update"] = selfupdate.start(force=True)  # yesterday's answer may miss last night's release
         except Exception as exc:  # noqa: BLE001 - a failed update never stops the key check
             result["self_update"] = {"error": str(exc)}
     elif task == "collect":
