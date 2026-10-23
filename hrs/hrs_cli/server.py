@@ -8,7 +8,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from hrshturman_core import schedule as schedule_core
 
-from . import docs, license, paths, schedule, selfupdate, web
+from . import docs, inbox, license, paths, schedule, selfupdate, web
 from .inproc import InProcessCollectorClient
 
 # Read before the local instructions: the licence first, the rest in work_guide (Claude Code cuts at about 2 KB).
@@ -20,6 +20,8 @@ INSTRUCTIONS = (
     "В начале работы вызови license_status. Расписание включается само; пока schedule_status говорит "
     "ask_wake_hours=true, спроси человека об удобных часах (подробно в work_guide). В плановом пробуждении "
     "только подготовка, ничего не отправляй.\n"
+    "Прежде чем читать или писать работодателям в Telegram, почте и других чатах человека, вызови inbox_rules и "
+    "следуй им: старые диалоги не трогай, отвечай только на то, что ждёт действия кандидата.\n"
 )
 GUIDE = (
     "- Документы кандидата (резюме, письма, PDF, Word) загружай через document_import и ссылайся на "
@@ -47,6 +49,8 @@ GUIDE = (
     "умеет свои задачи по расписанию, предложи завести их на те же часы, заведи и вызови schedule_register. "
     "Если system_scheduler=false, человек выключил расписание сам: не включай без его просьбы. Сводка — digest_get, "
     "напоминания — reminders_list. Свои задачи по расписанию регистрируй через schedule_register."
+    "\n- Переписка с работодателями идёт через интеграции человека (Telegram, почта): перед ней всегда "
+    "inbox_rules. Срок, после которого диалог считается старым, человек может поменять: inbox_rules(max_age_days=N)."
     "\n- Справка о продукте — product_help: отвечай по ней, когда человек спрашивает, как работать с JobShturman."
 
 )
@@ -121,6 +125,13 @@ def build(settings=None, collector: Collector | None = None):
         """Где человек отвечает на вопросы: chat | builtin_browser | external_browser. Без mode — прочитать выбор.
         Спроси один раз и сохрани; смени, когда человек попросит."""
         return domain(lambda: {"ui_mode": web.set_mode(mode) if mode else web.get_mode(), "modes": list(web.MODES)})
+
+    @mcp.tool()
+    def inbox_rules(max_age_days: int | None = None) -> dict:
+        """Правила переписки с работодателями в Telegram, почте и других чатах человека: что читать, на что
+        отвечать, какие диалоги считать старыми. Вызывай перед каждым разбором входящих.
+        max_age_days меняй только по слову человека."""
+        return domain(lambda: inbox.rules(max_age_days))
 
     @mcp.tool()
     def ui_open(view: str = "intake", external: bool = False) -> dict:
