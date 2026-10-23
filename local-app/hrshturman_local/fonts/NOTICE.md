@@ -1,5 +1,5 @@
 # Шрифт для PDF
 
-`NotoSans-Regular.ttf`, `NotoSans-Bold.ttf` — Noto Sans (файлы проекта Noto).
-Лицензия: SIL Open Font License 1.1, полный текст в `OFL.txt` (из https://github.com/notofonts/latin-greek-cyrillic).
+`NotoSans-Regular.ttf`, `NotoSans-Bold.ttf`, `NotoSans-Italic.ttf` — Noto Sans (файлы проекта Noto).
+Лицензия: SIL Open Font License 1.1, полный текст в `OFL.txt` (из https://github.com/notofonts/latin-greek-cyrillic). Курсив — hinted-сборка из https://github.com/notofonts/notofonts.github.io (fonts/NotoSans/hinted/ttf).
 Шрифт лежит в пакете, чтобы PDF собирался одинаково на macOS и Windows без системного Arial.

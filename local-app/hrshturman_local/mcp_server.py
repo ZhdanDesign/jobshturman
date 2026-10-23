@@ -307,9 +307,12 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
 
     @tool
     def resume_save(content: dict, expected_version: int | None = None) -> dict:
-        """Сохранить мастер-резюме. content: track_id, language, headline, summary[{text, fact_ids}],
+        """Сохранить мастер-резюме. content: track_id, language, full_name, headline,
+        contacts {phone, email, city, relocation, telegram, linkedin} или строка, summary[{text, fact_ids}],
         experience[{employer, title, start, end, scope, bullets[{text, fact_ids}]}], competencies[{text, fact_ids}],
-        education, languages. Любая правка возвращает резюме в draft. Ответ содержит validation с ошибками."""
+        education, languages. end пустой — текущая работа («н.в.»). Несколько проектов одного места работы —
+        соседние записи с одинаковыми employer, title, start, end; scope каждой станет подзаголовком проекта.
+        Любая правка возвращает резюме в draft. Ответ содержит validation с ошибками."""
         return resume.save_resume(store, cid, content, expected_version, actor="agent")
 
     @tool
@@ -333,8 +336,9 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
 
     @tool
     def resume_render(track_id: str = "main") -> dict:
-        """Сделать DOCX и PDF из утверждённого резюме и проверить, что весь текст извлекается из файлов.
-        Возвращает пути к файлам и sha256. Вёрстку проверяет человек: layout остаётся not_verified."""
+        """Сделать DOCX и PDF (A4) из утверждённого резюме и проверить файлы: весь текст извлекается, имя —
+        первая строка, нет внутренних id (fact_…). Возвращает пути, sha256, text_extraction и checks
+        (a4, pdf_pages, warnings). Вёрстку проверяет человек: layout остаётся not_verified."""
         return render.render_resume(store, cid, settings.workspace, track_id)
 
     # --- stages 14-18, 22: vacancies and applications ---

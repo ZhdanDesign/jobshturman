@@ -3,9 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from docx import Document
+from docx.oxml.ns import qn
 from hrshturman_core import DomainError, Store, resume
 from hrshturman_core.workspace import create_candidate
 from hrshturman_local import render
+from pypdf import PdfReader
 
 
 class RenderTests(unittest.TestCase):
@@ -55,8 +58,65 @@ class RenderTests(unittest.TestCase):
         resume.approve_resume(self.store, "me", "main", saved["version"])
         manifest = render.render_resume(self.store, "me", self.ws)
         self.assertTrue(manifest["text_extraction"]["pdf"]["ok"], manifest["text_extraction"]["pdf"])
-        self.assertIn(("para", "Команда 40 человек"), render.blocks(content))
-        self.assertIn(("meta", "ivan@example.invalid · @ivan"), render.blocks(content))
+        self.assertIn(("scope", "Команда 40 человек"), render.blocks(content))
+        self.assertIn(("contacts", "ivan@example.invalid · @ivan"), render.blocks(content))
+
+    def test_layout_of_a_real_shaped_resume(self):  # owner's report on 0.9.4.7: leaked id, name, «н.в.», A4
+        fid = self.content["competencies"][0]["fact_ids"]
+
+        def claim(text, employer):
+            fact = resume.add_fact(self.store, "me", text, employer, {}, [])
+            resume.set_fact_status(self.store, "me", fact["object_id"], "confirmed", fact["version"])
+            return {"text": text, "fact_ids": [fact["object_id"]]}
+
+        ip = {"employer": "ИП Учебный", "title": "Основатель, архитектор ИИ-решений", "start": "2019", "end": None}
+        experience = [dict(ip, scope=claim(f"Проект {i}: автоматизация заявок", "ИП Учебный"),
+                           bullets=[claim(f"Сократил время обработки заявок в проекте {i} с двух дней до двух часов "
+                                          "за счёт ИИ-поиска по каталогам", "ИП Учебный") for _ in range(3)])
+                      for i in range(5)]
+        experience.append(dict(self.content["experience"][0], end="2019", start="2012"))
+        content = dict(self.content, full_name=None, experience=experience,
+                       contacts={"email": "ivan@example.invalid", "fact_ids": fid, "name": "Иван Учебный",
+                                 "phone": "+7 900 000-00-00"},
+                       education=["МГУ, 1991–1997"])
+        content.pop("full_name")
+        saved = resume.save_resume(self.store, "me", content, expected_version=self.saved["version"])
+        self.assertTrue(saved["validation"]["ok"], saved["validation"])
+        resume.approve_resume(self.store, "me", "main", saved["version"])
+        manifest = render.render_resume(self.store, "me", self.ws)
+        self.assertTrue(manifest["text_extraction"]["docx"]["ok"], manifest["text_extraction"]["docx"])
+        self.assertTrue(manifest["text_extraction"]["pdf"]["ok"], manifest["text_extraction"]["pdf"])
+        self.assertTrue(manifest["checks"]["a4"])
+        self.assertEqual(manifest["checks"]["pdf_pages"], 2)  # one page break to check
+        docx_path, pdf_path = (Path(f["path"]) for f in manifest["files"])
+
+        doc = Document(docx_path)
+        paras = [p for p in doc.paragraphs if p.text.strip()]
+        self.assertEqual((paras[0].text, paras[0].style.name), ("Иван Учебный", "Title"))
+        self.assertEqual(paras[2].text, "+7 900 000-00-00 · ivan@example.invalid")
+        text = "\n".join(p.text for p in paras)
+        self.assertNotIn("fact_", text)
+        self.assertEqual(text.count("ИП Учебный"), 1)  # five projects under one entry
+        self.assertIn("2019\u00a0— н.в.", text)
+        self.assertIn("1991\u00a0— 1997", text)
+        self.assertEqual(sum(p.style.name == "Heading 3" for p in paras), 5)
+        self.assertEqual(round(doc.sections[0].page_width.mm), 210)
+        self.assertEqual(round(doc.sections[0].left_margin.mm), render.MARGIN_MM)
+        self.assertEqual(doc.core_properties.author, "Иван Учебный")
+        self.assertEqual(doc.core_properties.language, "ru-RU")
+        for name in ("Title", "Heading 1", "Heading 2", "Heading 3"):
+            style = doc.styles[name]
+            self.assertEqual((style.font.name, str(style.font.color.rgb)), (render.DOCX_FONT, "000000"), name)
+            fonts = style.element.rPr.find(qn("w:rFonts"))
+            self.assertIsNone(fonts.get(qn("w:asciiTheme")), name)
+
+        reader = PdfReader(pdf_path)
+        self.assertEqual(reader.metadata.title, "Иван Учебный\u00a0— резюме")
+        self.assertEqual(reader.metadata.author, "Иван Учебный")
+        headings = {t for k, t in render.blocks(content) if k in render.KEEP_WITH_NEXT}
+        for page in reader.pages[:-1]:  # no heading is the last line of a page
+            last = [s for s in (page.extract_text() or "").splitlines() if s.strip()][-1]
+            self.assertFalse(any(last.strip() and last.strip() in h for h in headings), last)
 
     def test_extraction_check_catches_lost_line(self):
         lines = render.blocks(self.content)

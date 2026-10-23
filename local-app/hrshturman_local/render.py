@@ -9,62 +9,265 @@ import hashlib
 from pathlib import Path
 
 from docx import Document
-from docx.shared import Pt
+from docx.enum.text import WD_TAB_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Mm, Pt, RGBColor
 from fpdf import FPDF
 from hrshturman_core import DomainError
 from hrshturman_core import resume as resume_mod
+from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.common import digest
-from hrshturman_core.render_layout import blocks, extraction_check
+from hrshturman_core.render_layout import DASH, blocks, extraction_check
 from pypdf import PdfReader
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
-FONTS = {"": FONT_DIR / "NotoSans-Regular.ttf", "B": FONT_DIR / "NotoSans-Bold.ttf"}
-RENDERER = "python-docx + fpdf2, Noto Sans (bundled)"
+FONTS = {"": FONT_DIR / "NotoSans-Regular.ttf", "B": FONT_DIR / "NotoSans-Bold.ttf",
+         "I": FONT_DIR / "NotoSans-Italic.ttf"}
+RENDERER = "python-docx + fpdf2, Noto Sans (bundled), A4"
+DOCX_FONT = "Arial"
+MARGIN_MM = 18
+PAGE_MM = (210, 297)
+TEXT_MM = PAGE_MM[0] - 2 * MARGIN_MM
+BULLET_INDENT_MM = 4.5
+LINE = 1.2            # line height / font size
+MAX_PAGES = 3
+GREY = (0x44, 0x44, 0x44)
+# One style table for both files: size pt, style (B bold, I italic), space before/after pt.
+STYLES = {
+    "name": (22, "B", 0, 2), "title": (12.5, "", 0, 2), "contacts": (10, "", 0, 4),
+    "section": (12, "B", 11, 4), "role": (11, "B", 7, 1), "dates": (10, "", 0, 2),
+    "project": (10.5, "B", 5, 1), "scope": (10.5, "I", 0, 2),
+    "bullet": (10.5, "", 0, 2), "line": (10.5, "", 0, 2),
+}
+KEEP_WITH_NEXT = {"name", "title", "section", "role", "dates", "project", "scope"}
+PT_MM = 25.4 / 72
 
 
-def render_docx(lines, path):
-    doc = Document()
-    doc.styles["Normal"].font.name = "Arial"
-    doc.styles["Normal"].font.size = Pt(10.5)
-    for kind, text in lines:
-        if kind == "name":
-            doc.add_heading(text, level=0)
-        elif kind == "section":
-            doc.add_heading(text, level=1)
-        elif kind == "title":
-            doc.add_paragraph().add_run(text).bold = True
-        elif kind == "role":
-            doc.add_heading(text, level=2)
-        elif kind == "bullet":
-            doc.add_paragraph(text, style="List Bullet")
-        else:
-            doc.add_paragraph(text)
-    doc.save(path)
+def _language(content):
+    return "ru-RU" if (content.get("language") or "ru") == "ru" else "en-US"
 
 
-def render_pdf(lines, path):
-    for style, font in FONTS.items():
+def _pdf():
+    for font in FONTS.values():
         if not font.is_file():
             raise DomainError("unsupported_environment", f"Font not found: {font}")
     pdf = FPDF(format="A4")
-    pdf.set_margins(18, 16, 18)
-    pdf.set_auto_page_break(True, margin=16)
+    pdf.set_margins(MARGIN_MM, MARGIN_MM, MARGIN_MM)
+    pdf.set_auto_page_break(True, margin=MARGIN_MM)
     for style, font in FONTS.items():
-        pdf.add_font("Arial", style, str(font))
-    pdf.add_page()
-    sizes = {"name": (20, "B"), "title": (13, "B"), "section": (13, "B"), "role": (11.5, "B"),
-             "meta": (10, ""), "para": (10.5, ""), "bullet": (10.5, "")}
-    for kind, text in lines:
-        size, style = sizes[kind]
-        if kind == "section":
-            pdf.ln(3)
+        pdf.add_font("Noto", style, str(font))
+    return pdf
+
+
+def contacts_size(lines):
+    """The contact line stays on one line: shrink it (not below 8.5 pt) until it fits the text width."""
+    text = next((t for k, t in lines if k == "contacts"), "")
+    pdf, size = _pdf(), STYLES["contacts"][0]
+    while size > 8.5:
+        pdf.set_font("Noto", "", size)
+        if pdf.get_string_width(text) <= TEXT_MM:
+            break
+        size -= 0.5
+    return size
+
+
+def _with_dates(lines):
+    """(kind, text, dates): a role line carries its period when both fit on one line (dates on the right).
+
+    A longer role keeps its own lines and the period follows as a separate grey line, so the
+    dates never land next to the last wrapped line of the heading.
+    """
+    pdf = _pdf()
+    out, i = [], 0
+    while i < len(lines):
+        kind, text = lines[i]
+        if kind == "role" and i + 1 < len(lines) and lines[i + 1][0] == "dates":
+            dates = lines[i + 1][1]
+            pdf.set_font("Noto", STYLES["role"][1], STYLES["role"][0])
+            role_w = pdf.get_string_width(text)
+            pdf.set_font("Noto", "", STYLES["dates"][0])
+            if role_w + pdf.get_string_width(dates) + 4 <= TEXT_MM:
+                out.append((kind, text, dates))
+                i += 2
+                continue
+        out.append((kind, text, ""))
+        i += 1
+    return out
+
+
+# --- DOCX ---
+
+def _plain_style(style, size, bold=False, italic=False, color=(0, 0, 0)):
+    """Black text in the one document font: drop the template's theme fonts, colours and borders."""
+    font = style.font
+    font.name, font.size, font.bold, font.italic = DOCX_FONT, Pt(size), bold, italic
+    font.color.rgb = RGBColor(*color)
+    rpr = style.element.get_or_add_rPr()
+    fonts = rpr.find(qn("w:rFonts"))
+    for attr in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+        fonts.attrib.pop(qn(attr), None)
+    for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        fonts.set(qn(attr), DOCX_FONT)
+    ppr = style.element.get_or_add_pPr()
+    for border in ppr.findall(qn("w:pBdr")):
+        ppr.remove(border)
+    style.paragraph_format.line_spacing = 1.15
+
+
+def _set_lang(style, lang):
+    rpr = style.element.get_or_add_rPr()
+    for old in rpr.findall(qn("w:lang")):
+        rpr.remove(old)
+    el = OxmlElement("w:lang")
+    for attr in ("w:val", "w:eastAsia", "w:bidi"):
+        el.set(qn(attr), lang)
+    rpr.append(el)
+
+
+def _bottom_rule(style):
+    ppr = style.element.get_or_add_pPr()
+    bdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    for attr, value in (("w:val", "single"), ("w:sz", "4"), ("w:space", "1"), ("w:color", "000000")):
+        bottom.set(qn(attr), value)
+    bdr.append(bottom)
+    ppr.append(bdr)
+
+
+def _docx_styles(doc, lang):
+    styles = doc.styles
+    normal = styles["Normal"]
+    _plain_style(normal, STYLES["line"][0])
+    _set_lang(normal, lang)
+    normal.paragraph_format.widow_control = True
+    normal.paragraph_format.space_after = Pt(STYLES["line"][3])
+    mapping = {"name": "Title", "title": "Subtitle", "section": "Heading 1", "role": "Heading 2",
+               "project": "Heading 3", "bullet": "List Bullet"}
+    for kind, name in mapping.items():
+        size, style, before, after = STYLES[kind]
+        st = styles[name]
+        _plain_style(st, size, bold="B" in style, italic="I" in style)
+        _set_lang(st, lang)
+        fmt = st.paragraph_format
+        fmt.space_before, fmt.space_after = Pt(before), Pt(after)
+        fmt.keep_with_next = kind in KEEP_WITH_NEXT
+        fmt.keep_together = True
+    styles["Heading 1"].font.all_caps = True
+    _bottom_rule(styles["Heading 1"])
+    bullet = styles["List Bullet"].paragraph_format
+    bullet.left_indent, bullet.first_line_indent = Mm(BULLET_INDENT_MM), Mm(-BULLET_INDENT_MM)
+
+
+def render_docx(lines, path, content=None, contacts_pt=None):
+    content = content or {}
+    doc = Document()
+    section = doc.sections[0]
+    section.page_width, section.page_height = Mm(PAGE_MM[0]), Mm(PAGE_MM[1])
+    for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
+        setattr(section, side, Mm(MARGIN_MM))
+    _docx_styles(doc, _language(content))
+    name = next((t for k, t in lines if k == "name"), "")
+    for kind, text, dates in _with_dates(lines):
+        size, style, before, after = STYLES[kind]
+        if kind == "name":
+            doc.add_paragraph(text, style="Title")
+        elif kind == "title":
+            doc.add_paragraph(text, style="Subtitle")
+        elif kind == "section":
+            doc.add_paragraph(text, style="Heading 1")
         elif kind == "role":
-            pdf.ln(1.5)
-        pdf.set_font("Arial", style, size)
-        pdf.multi_cell(0, size * 0.5, f"• {text}" if kind == "bullet" else text, align="L",
-                       new_x="LMARGIN", new_y="NEXT")
-        if kind in ("name", "section"):
-            pdf.ln(1.5)
+            par = doc.add_paragraph(text, style="Heading 2")
+            if dates:
+                par.paragraph_format.tab_stops.add_tab_stop(Mm(TEXT_MM), WD_TAB_ALIGNMENT.RIGHT)
+                run = par.add_run(f"\t{dates}")
+                run.bold, run.font.size, run.font.color.rgb = False, Pt(STYLES["dates"][0]), RGBColor(*GREY)
+        elif kind == "dates":
+            par = doc.add_paragraph()
+            run = par.add_run(text)
+            run.font.size, run.font.color.rgb = Pt(size), RGBColor(*GREY)
+            par.paragraph_format.space_after = Pt(2)
+            par.paragraph_format.keep_with_next = True
+        elif kind == "project":
+            doc.add_paragraph(text, style="Heading 3")
+        elif kind == "bullet":
+            doc.add_paragraph(text, style="List Bullet")
+        else:
+            par = doc.add_paragraph()
+            run = par.add_run(text)
+            run.italic = "I" in style
+            run.font.size = Pt(contacts_pt if kind == "contacts" and contacts_pt else size)
+            fmt = par.paragraph_format
+            fmt.space_before, fmt.space_after = Pt(before), Pt(after)
+            fmt.keep_with_next = kind in KEEP_WITH_NEXT
+    props = doc.core_properties
+    props.author = props.last_modified_by = name
+    props.title = f"{name}{DASH}резюме" if name else "Резюме"
+    props.language, props.comments, props.keywords = _language(content), "", ""
+    doc.save(path)
+
+
+# --- PDF ---
+
+def _height(pdf, kind, text, dates=""):
+    size, style, before, after = STYLES[kind]
+    pdf.set_font("Noto", style, size)
+    width = TEXT_MM - (BULLET_INDENT_MM if kind == "bullet" else 0)
+    if dates:
+        width -= pdf.get_string_width(dates) + 4
+    lines = pdf.multi_cell(width, size * PT_MM * LINE, text, dry_run=True, output="LINES")
+    return (before + after) * PT_MM + len(lines) * size * PT_MM * LINE
+
+
+def render_pdf(lines, path, content=None, contacts_pt=None):
+    content = content or {}
+    pdf = _pdf()
+    name = next((t for k, t in lines if k == "name"), "")
+    pdf.set_title(f"{name}{DASH}резюме" if name else "Резюме")
+    pdf.set_author(name)
+    pdf.set_lang(_language(content))
+    pdf.set_creator(PRODUCT_NAME)
+    pdf.set_producer(PRODUCT_NAME)
+    pdf.add_page()
+    items = _with_dates(lines)
+    bottom = PAGE_MM[1] - MARGIN_MM
+    for i, (kind, text, dates) in enumerate(items):
+        size, style, before, after = STYLES[kind]
+        if kind == "contacts" and contacts_pt:
+            size = contacts_pt
+        need = _height(pdf, kind, text, dates)
+        if kind in KEEP_WITH_NEXT and i + 1 < len(items):  # a heading never stays alone at the page end
+            need += _height(pdf, *items[i + 1])
+        if pdf.get_y() > pdf.t_margin + 1 and pdf.get_y() + need > bottom:
+            pdf.add_page()
+        elif pdf.get_y() > pdf.t_margin + 1:
+            pdf.ln(before * PT_MM)
+        h = size * PT_MM * LINE
+        pdf.set_text_color(*(GREY if kind == "dates" else (0, 0, 0)))
+        pdf.set_font("Noto", style, size)
+        if kind == "bullet":
+            pdf.set_x(pdf.l_margin + 1)
+            pdf.cell(BULLET_INDENT_MM - 1, h, "•")
+            pdf.multi_cell(TEXT_MM - BULLET_INDENT_MM, h, text, align="L", new_x="LMARGIN", new_y="NEXT")
+        elif kind == "role" and dates:
+            y = pdf.get_y()
+            pdf.set_font("Noto", "", STYLES["dates"][0])
+            dates_w = pdf.get_string_width(dates)
+            pdf.set_text_color(*GREY)
+            pdf.set_xy(pdf.l_margin + TEXT_MM - dates_w, y)
+            pdf.cell(dates_w, h, dates, align="R")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Noto", style, size)
+            pdf.set_xy(pdf.l_margin, y)
+            pdf.multi_cell(TEXT_MM - dates_w - 4, h, text, align="L", new_x="LMARGIN", new_y="NEXT")
+        else:
+            shown = text.upper() if kind == "section" else text
+            pdf.multi_cell(TEXT_MM, h, shown, align="L", new_x="LMARGIN", new_y="NEXT")
+        if kind == "section":
+            pdf.set_line_width(0.25)
+            pdf.line(pdf.l_margin, pdf.get_y() + 0.6, pdf.l_margin + TEXT_MM, pdf.get_y() + 0.6)
+            pdf.ln(0.6)
+        pdf.ln(after * PT_MM)
     pdf.output(str(path))
 
 
@@ -85,10 +288,15 @@ def render_resume(store, candidate_id, workspace, track_id="main"):
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"master-cv-{content_hash[:8]}"
     docx_path, pdf_path = out_dir / f"{stem}.docx", out_dir / f"{stem}.pdf"
-    render_docx(lines, docx_path)
-    render_pdf(lines, pdf_path)
-    docx_text = "\n".join(p.text for p in Document(docx_path).paragraphs)
-    pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_path).pages)
+    contacts_pt = contacts_size(lines)
+    render_docx(lines, docx_path, cv["content"], contacts_pt)
+    render_pdf(lines, pdf_path, cv["content"], contacts_pt)
+    docx = Document(docx_path)
+    docx_text = "\n".join(p.text for p in docx.paragraphs)
+    pdf_pages = PdfReader(pdf_path).pages
+    pdf_text = "\n".join(page.extract_text() or "" for page in pdf_pages)
+    sizes = {"docx": [round(docx.sections[0].page_width.mm), round(docx.sections[0].page_height.mm)],
+             "pdf": [round(float(pdf_pages[0].mediabox.width) * PT_MM), round(float(pdf_pages[0].mediabox.height) * PT_MM)]}
     manifest = {
         "content_hash": content_hash,
         "renderer": RENDERER,
@@ -96,6 +304,12 @@ def render_resume(store, candidate_id, workspace, track_id="main"):
                   for p in (docx_path, pdf_path)],
         "text_extraction": {"docx": extraction_check(lines, docx_text), "pdf": extraction_check(lines, pdf_text)},
         "layout": "not_verified",
+        "checks": {
+            "a4": all(size == list(PAGE_MM) for size in sizes.values()),
+            "pdf_pages": len(pdf_pages),
+            "warnings": [f"PDF: {len(pdf_pages)} стр., больше {MAX_PAGES}: сократите резюме"]
+            if len(pdf_pages) > MAX_PAGES else [],
+        },
     }
     resume_mod.record_render(store, candidate_id, track_id, manifest)
     return manifest
