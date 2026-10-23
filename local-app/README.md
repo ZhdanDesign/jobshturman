@@ -7,7 +7,7 @@
 ## Что нужно
 
 - macOS с включённым FileVault. Приложение не шифрует базу само и полагается на шифрование диска.
-- Python 3.12+ и пакеты из `pyproject.toml`: `mcp` 2.x (как в `collector`), `python-docx`, `fpdf2`, `pypdf`. Проверено на mcp 2.3.0. Шрифт для PDF (Noto Sans) лежит в пакете, системный Arial не нужен. Обычно приложение запускают через `hrs serve` (см. `../hrs/README.md`).
+- Python 3.12+ и пакеты из `pyproject.toml`: `mcp` 2.x (как в `collector`), `python-docx`, `fpdf2`, `pypdf`. Проверено на mcp 2.3.0. Шрифт резюме (IBM Plex Sans) лежит в пакете: им рисуется PDF, в DOCX он встраивается, системные шрифты не нужны. Обычно приложение запускают через `hrs serve` (см. `../hrs/README.md`).
 
 ## Подключить к Claude
 

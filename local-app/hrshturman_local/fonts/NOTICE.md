@@ -1,5 +1,5 @@
-# Шрифт для PDF
+# Шрифт резюме
 
-`NotoSans-Regular.ttf`, `NotoSans-Bold.ttf`, `NotoSans-Italic.ttf` — Noto Sans (файлы проекта Noto).
-Лицензия: SIL Open Font License 1.1, полный текст в `OFL.txt` (из https://github.com/notofonts/latin-greek-cyrillic). Курсив — hinted-сборка из https://github.com/notofonts/notofonts.github.io (fonts/NotoSans/hinted/ttf).
-Шрифт лежит в пакете, чтобы PDF собирался одинаково на macOS и Windows без системного Arial.
+`IBMPlexSans-Regular.ttf`, `IBMPlexSans-Bold.ttf`, `IBMPlexSans-Italic.ttf` — IBM Plex Sans (файлы проекта IBM Plex, https://github.com/IBM/plex, packages/plex-sans/fonts/complete/ttf).
+Лицензия: SIL Open Font License 1.1, полный текст в `OFL.txt` (Reserved Font Name «Plex»: шрифт не переименовываем и не меняем).
+Шрифт лежит в пакете: PDF рисуется им, а в DOCX он встраивается (word/fonts/), поэтому оба файла выглядят одинаково на macOS и Windows без установки шрифтов.

@@ -14,7 +14,9 @@ Line kinds, in reading order:
 """
 import re
 
-NBSP = " "
+from .typography import typeset
+
+NBSP = "\u00a0"
 DASH = f"{NBSP}— "
 PRESENT = {"ru": "н.в."}
 # Contact parts in print order; anything else in the contacts dict (fact_ids, ids, notes) is not printed.
@@ -128,7 +130,7 @@ def blocks(content):
         if content.get(key):
             out.append(("section", title))
             out += [("line", _entry(c)) for c in content[key]]
-    return [(kind, text.strip()) for kind, text in out if text and text.strip()]
+    return [(kind, typeset(kind, text.strip())) for kind, text in out if text and text.strip()]
 
 
 def _squash(text):

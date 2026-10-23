@@ -1,6 +1,8 @@
 """Render of the approved master CV on a synthetic candidate."""
+import re
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from docx import Document
@@ -58,8 +60,9 @@ class RenderTests(unittest.TestCase):
         resume.approve_resume(self.store, "me", "main", saved["version"])
         manifest = render.render_resume(self.store, "me", self.ws)
         self.assertTrue(manifest["text_extraction"]["pdf"]["ok"], manifest["text_extraction"]["pdf"])
-        self.assertIn(("scope", "Команда 40 человек"), render.blocks(content))
-        self.assertIn(("contacts", "ivan@example.invalid · @ivan"), render.blocks(content))
+        lines = [(k, t.replace("\u00a0", " ")) for k, t in render.blocks(content)]
+        self.assertIn(("scope", "Команда 40 человек"), lines)
+        self.assertIn(("contacts", "ivan@example.invalid · @ivan"), lines)
 
     def test_layout_of_a_real_shaped_resume(self):  # owner's report on 0.9.4.7: leaked id, name, «н.в.», A4
         fid = self.content["competencies"][0]["fact_ids"]
@@ -92,18 +95,26 @@ class RenderTests(unittest.TestCase):
 
         doc = Document(docx_path)
         paras = [p for p in doc.paragraphs if p.text.strip()]
-        self.assertEqual((paras[0].text, paras[0].style.name), ("Иван Учебный", "Title"))
-        self.assertEqual(paras[2].text, "+7 900 000-00-00 · ivan@example.invalid")
-        text = "\n".join(p.text for p in paras)
+        for par in paras:
+            par.text_plain = par.text.replace("\u00a0", " ")
+        self.assertEqual((paras[0].text_plain, paras[0].style.name), ("Иван Учебный", "Title"))
+        self.assertEqual(paras[2].text_plain, "+7 900 000-00-00 · ivan@example.invalid")
+        text = "\n".join(p.text_plain for p in paras)
         self.assertNotIn("fact_", text)
         self.assertEqual(text.count("ИП Учебный"), 1)  # five projects under one entry
-        self.assertIn("2019\u00a0— н.в.", text)
-        self.assertIn("1991\u00a0— 1997", text)
+        self.assertIn("2019 — н.в.", text)
+        self.assertIn("1991 — 1997", text)
         self.assertEqual(sum(p.style.name == "Heading 3" for p in paras), 5)
         self.assertEqual(round(doc.sections[0].page_width.mm), 210)
         self.assertEqual(round(doc.sections[0].left_margin.mm), render.MARGIN_MM)
         self.assertEqual(doc.core_properties.author, "Иван Учебный")
         self.assertEqual(doc.core_properties.language, "ru-RU")
+        with zipfile.ZipFile(docx_path) as z:  # the font travels inside the DOCX
+            fonts = [n for n in z.namelist() if n.startswith("word/fonts/")]
+            self.assertEqual(len(fonts), 3)
+            self.assertIn(f'w:name="{render.FONT}"', z.read("word/fontTable.xml").decode())
+            key = re.search(r'w:fontKey="([^"]+)"', z.read("word/fontTable.xml").decode())[1]
+            self.assertEqual(render._obfuscated(z.read(fonts[0]), key)[:4], b"\x00\x01\x00\x00")  # TrueType again
         for name in ("Title", "Heading 1", "Heading 2", "Heading 3"):
             style = doc.styles[name]
             self.assertEqual((style.font.name, str(style.font.color.rgb)), (render.DOCX_FONT, "000000"), name)
@@ -122,7 +133,7 @@ class RenderTests(unittest.TestCase):
         lines = render.blocks(self.content)
         result = render.extraction_check(lines, "Иван Учебный")
         self.assertFalse(result["ok"])
-        self.assertIn("Коммерческий директор, B2B-дистрибуция", result["missing"])
+        self.assertIn("Коммерческий директор, B2B-дистрибуция", [m.replace("\u00a0", " ") for m in result["missing"]])
 
     def test_render_of_old_version_is_refused(self):
         approved = resume.approve_resume(self.store, "me", "main", self.saved["version"])

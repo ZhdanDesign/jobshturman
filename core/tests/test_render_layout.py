@@ -1,8 +1,21 @@
 import unittest
 
-from hrshturman_core.render_layout import blocks, extraction_check, period
+from hrshturman_core.render_layout import blocks as typeset_blocks
+from hrshturman_core.render_layout import extraction_check
+from hrshturman_core.render_layout import period as real_period
+from hrshturman_core.typography import NBSP, fix_text, keep_phrases, typeset
 
-D = " — "
+D = " — "
+
+
+def blocks(content):
+    """Structure tests read plain spaces; typography has its own tests below."""
+    return [(kind, text.replace(NBSP, " ")) for kind, text in typeset_blocks(content)]
+
+
+def period(*args):
+    return real_period(*args).replace(NBSP, " ")
+
 CONTENT = {"full_name": "Иван Учебный", "headline": "Коммерческий директор",
            "experience": [{"employer": "Альфа", "title": "Директор", "start": "2021", "end": "2024",
                            "bullets": [{"text": "Рост выручки на 25%", "fact_ids": ["f1"]}]}],
@@ -64,8 +77,8 @@ class RenderLayoutTests(unittest.TestCase):
 
     def test_check_ignores_wrapping_and_reports_lost_lines(self):
         extracted = "Иван Учебный\nКоммерческий\nдиректор\nОпыт работы\nАльфа — Директор\n2021 — 2024\n• Рост выручки\nна 25%\nЯзыки"
-        result = extraction_check(blocks(CONTENT), extracted)
-        self.assertEqual(result["missing"], ["Английский B2"])
+        result = extraction_check(typeset_blocks(CONTENT), extracted)
+        self.assertEqual([m.replace(NBSP, " ") for m in result["missing"]], ["Английский B2"])
         self.assertTrue(result["name_first"])
 
     def test_check_fails_on_internal_ids_and_name_not_first(self):
@@ -75,6 +88,41 @@ class RenderLayoutTests(unittest.TestCase):
         self.assertEqual(result["leaked_ids"], ["fact_6a08bde16ca44357"])
         self.assertFalse(result["name_first"])
         self.assertTrue(extraction_check(lines, "Иван\na@b.c")["ok"])
+
+
+
+class TypographyTests(unittest.TestCase):
+    def test_same_rules_as_the_site_tool(self):  # scripts/nbsp.py is the reference
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[2] / "scripts" / "nbsp.py"
+        spec = importlib.util.spec_from_file_location("nbsp", path)
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        for text in ("Работал в Москве и в Казани 15 лет", "Рост на 25% за 2023 год — при этом без найма",
+                     "Сделал бы, если бы мог", "Не о том, а о главном: 300+ клиентов"):
+            self.assertEqual(fix_text(text), tool.fix_text(text), text)
+
+    def test_headline_keeps_short_parts_whole(self):  # owner: «Forward / Deployed Engineer» was split
+        text = typeset("title", "Руководитель AI-трансформации и автоматизации процессов | Forward Deployed Engineer")
+        self.assertIn(f"процессов{NBSP}| Forward{NBSP}Deployed{NBSP}Engineer", text)
+        self.assertIn(f"и{NBSP}автоматизации", text)
+        self.assertIn("Руководитель AI-трансформации", text)  # a long part still wraps
+
+    def test_contacts_never_break_inside_a_part(self):
+        text = typeset("contacts", "+7 900 000-00-00 · Москва, готов к релокации")
+        self.assertEqual(text, f"+7{NBSP}900{NBSP}000-00-00{NBSP}· Москва,{NBSP}готов{NBSP}к{NBSP}релокации")
+
+    def test_numbers_prepositions_and_last_word(self):
+        text = typeset("bullet", "Запустил систему в работу за 6 недель")
+        self.assertEqual(text, f"Запустил систему в{NBSP}работу за{NBSP}6{NBSP}недель")
+        self.assertEqual(typeset("bullet", text), text)  # idempotent
+
+    def test_only_spaces_change(self):
+        for kind in ("name", "title", "contacts", "role", "dates", "project", "scope", "bullet", "line"):
+            text = "ИП Учебный — Основатель | Forward Deployed Engineer · 2019 — н.в. за 6 недель"
+            self.assertEqual(typeset(kind, text).replace(NBSP, " "), text, kind)
+        self.assertEqual(keep_phrases("a — b"), f"a{NBSP}— b")
 
 
 if __name__ == "__main__":

@@ -6,11 +6,15 @@ is searched in the extracted text. Visual layout is not judged here: it stays
 `not_verified` until a person looks at the file (stage 07 step 7).
 """
 import hashlib
+import uuid
 from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_TAB_ALIGNMENT
-from docx.oxml import OxmlElement
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 from fpdf import FPDF
@@ -18,14 +22,18 @@ from hrshturman_core import DomainError
 from hrshturman_core import resume as resume_mod
 from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.common import digest
-from hrshturman_core.render_layout import DASH, blocks, extraction_check
+from hrshturman_core.render_layout import DASH, NBSP, blocks, extraction_check
+from lxml import etree
 from pypdf import PdfReader
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
-FONTS = {"": FONT_DIR / "NotoSans-Regular.ttf", "B": FONT_DIR / "NotoSans-Bold.ttf",
-         "I": FONT_DIR / "NotoSans-Italic.ttf"}
-RENDERER = "python-docx + fpdf2, Noto Sans (bundled), A4"
-DOCX_FONT = "Arial"
+# One font for both files: drawn into the PDF and embedded into the DOCX, so Word and LibreOffice
+# show it without installing anything.
+FONT = "IBM Plex Sans"
+FONTS = {"": FONT_DIR / "IBMPlexSans-Regular.ttf", "B": FONT_DIR / "IBMPlexSans-Bold.ttf",
+         "I": FONT_DIR / "IBMPlexSans-Italic.ttf"}
+RENDERER = f"python-docx + fpdf2, {FONT} (bundled, embedded in DOCX), A4"
+DOCX_FONT = FONT
 MARGIN_MM = 18
 PAGE_MM = (210, 297)
 TEXT_MM = PAGE_MM[0] - 2 * MARGIN_MM
@@ -56,7 +64,7 @@ def _pdf():
     pdf.set_margins(MARGIN_MM, MARGIN_MM, MARGIN_MM)
     pdf.set_auto_page_break(True, margin=MARGIN_MM)
     for style, font in FONTS.items():
-        pdf.add_font("Noto", style, str(font))
+        pdf.add_font(FONT, style, str(font))
     return pdf
 
 
@@ -65,7 +73,7 @@ def contacts_size(lines):
     text = next((t for k, t in lines if k == "contacts"), "")
     pdf, size = _pdf(), STYLES["contacts"][0]
     while size > 8.5:
-        pdf.set_font("Noto", "", size)
+        pdf.set_font(FONT, "", size)
         if pdf.get_string_width(text) <= TEXT_MM:
             break
         size -= 0.5
@@ -84,9 +92,9 @@ def _with_dates(lines):
         kind, text = lines[i]
         if kind == "role" and i + 1 < len(lines) and lines[i + 1][0] == "dates":
             dates = lines[i + 1][1]
-            pdf.set_font("Noto", STYLES["role"][1], STYLES["role"][0])
+            pdf.set_font(FONT, STYLES["role"][1], STYLES["role"][0])
             role_w = pdf.get_string_width(text)
-            pdf.set_font("Noto", "", STYLES["dates"][0])
+            pdf.set_font(FONT, "", STYLES["dates"][0])
             if role_w + pdf.get_string_width(dates) + 4 <= TEXT_MM:
                 out.append((kind, text, dates))
                 i += 2
@@ -97,6 +105,43 @@ def _with_dates(lines):
 
 
 # --- DOCX ---
+
+def _obfuscated(font_bytes, key):
+    """ECMA-376 Part 1, 17.8.1: the first 32 bytes XOR-ed with the font key read backwards."""
+    hexkey = key.strip("{}").replace("-", "")
+    xor = bytes(int(hexkey[i:i + 2], 16) for i in range(30, -1, -2))
+    head = bytes(b ^ xor[i % 16] for i, b in enumerate(font_bytes[:32]))
+    return head + font_bytes[32:]
+
+
+def _embed_fonts(doc):
+    """Put the CV font into the DOCX (word/fonts/*.odttf) the way Word's «embed fonts» does."""
+    table = next(r.target_part for r in doc.part.rels.values() if r.reltype == RT.FONT_TABLE)
+    root = parse_xml(table.blob)
+    for old in root.findall(qn("w:font")):
+        if old.get(qn("w:name")) == FONT:
+            root.remove(old)
+    font = OxmlElement("w:font")
+    font.set(qn("w:name"), FONT)
+    for tag, val in (("w:charset", "CC"), ("w:family", "swiss"), ("w:pitch", "variable")):
+        el = OxmlElement(tag)
+        el.set(qn("w:val"), val)
+        font.append(el)
+    for i, (style, tag) in enumerate((("", "w:embedRegular"), ("B", "w:embedBold"), ("I", "w:embedItalic")), 1):
+        key = "{" + str(uuid.uuid4()).upper() + "}"
+        part = Part(PackURI(f"/word/fonts/font{i}.odttf"),
+                    "application/vnd.openxmlformats-officedocument.obfuscatedFont",
+                    _obfuscated(FONTS[style].read_bytes(), key), doc.part.package)
+        el = OxmlElement(tag)
+        el.set(qn("r:id"), table.relate_to(part, RT.FONT))
+        el.set(qn("w:fontKey"), key)
+        font.append(el)
+    root.append(font)
+    table._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    settings = doc.settings.element
+    if settings.find(qn("w:embedTrueTypeFonts")) is None:
+        settings.insert(0, OxmlElement("w:embedTrueTypeFonts"))
+
 
 def _plain_style(style, size, bold=False, italic=False, color=(0, 0, 0)):
     """Black text in the one document font: drop the template's theme fonts, colours and borders."""
@@ -109,10 +154,12 @@ def _plain_style(style, size, bold=False, italic=False, color=(0, 0, 0)):
         fonts.attrib.pop(qn(attr), None)
     for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
         fonts.set(qn(attr), DOCX_FONT)
+    for extra in rpr.findall(qn("w:spacing")) + rpr.findall(qn("w:kern")):  # Subtitle/Title letter spacing
+        rpr.remove(extra)
     ppr = style.element.get_or_add_pPr()
-    for border in ppr.findall(qn("w:pBdr")):
-        ppr.remove(border)
-    style.paragraph_format.line_spacing = 1.15
+    for extra in ppr.findall(qn("w:pBdr")) + ppr.findall(qn("w:contextualSpacing")):  # borders, list spacing
+        ppr.remove(extra)
+    style.paragraph_format.line_spacing = Pt(size * LINE)  # exact, as in the PDF
 
 
 def _set_lang(style, lang):
@@ -167,7 +214,7 @@ def render_docx(lines, path, content=None, contacts_pt=None):
     for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
         setattr(section, side, Mm(MARGIN_MM))
     _docx_styles(doc, _language(content))
-    name = next((t for k, t in lines if k == "name"), "")
+    name = next((t for k, t in lines if k == "name"), "").replace(NBSP, " ")  # metadata: plain spaces
     for kind, text, dates in _with_dates(lines):
         size, style, before, after = STYLES[kind]
         if kind == "name":
@@ -186,7 +233,8 @@ def render_docx(lines, path, content=None, contacts_pt=None):
             par = doc.add_paragraph()
             run = par.add_run(text)
             run.font.size, run.font.color.rgb = Pt(size), RGBColor(*GREY)
-            par.paragraph_format.space_after = Pt(2)
+            par.paragraph_format.space_after = Pt(after)
+            par.paragraph_format.line_spacing = Pt(size * LINE)
             par.paragraph_format.keep_with_next = True
         elif kind == "project":
             doc.add_paragraph(text, style="Heading 3")
@@ -198,8 +246,10 @@ def render_docx(lines, path, content=None, contacts_pt=None):
             run.italic = "I" in style
             run.font.size = Pt(contacts_pt if kind == "contacts" and contacts_pt else size)
             fmt = par.paragraph_format
+            fmt.line_spacing = Pt(run.font.size.pt * LINE)
             fmt.space_before, fmt.space_after = Pt(before), Pt(after)
             fmt.keep_with_next = kind in KEEP_WITH_NEXT
+    _embed_fonts(doc)
     props = doc.core_properties
     props.author = props.last_modified_by = name
     props.title = f"{name}{DASH}резюме" if name else "Резюме"
@@ -211,7 +261,7 @@ def render_docx(lines, path, content=None, contacts_pt=None):
 
 def _height(pdf, kind, text, dates=""):
     size, style, before, after = STYLES[kind]
-    pdf.set_font("Noto", style, size)
+    pdf.set_font(FONT, style, size)
     width = TEXT_MM - (BULLET_INDENT_MM if kind == "bullet" else 0)
     if dates:
         width -= pdf.get_string_width(dates) + 4
@@ -222,7 +272,7 @@ def _height(pdf, kind, text, dates=""):
 def render_pdf(lines, path, content=None, contacts_pt=None):
     content = content or {}
     pdf = _pdf()
-    name = next((t for k, t in lines if k == "name"), "")
+    name = next((t for k, t in lines if k == "name"), "").replace(NBSP, " ")  # metadata: plain spaces
     pdf.set_title(f"{name}{DASH}резюме" if name else "Резюме")
     pdf.set_author(name)
     pdf.set_lang(_language(content))
@@ -244,20 +294,20 @@ def render_pdf(lines, path, content=None, contacts_pt=None):
             pdf.ln(before * PT_MM)
         h = size * PT_MM * LINE
         pdf.set_text_color(*(GREY if kind == "dates" else (0, 0, 0)))
-        pdf.set_font("Noto", style, size)
+        pdf.set_font(FONT, style, size)
         if kind == "bullet":
             pdf.set_x(pdf.l_margin + 1)
             pdf.cell(BULLET_INDENT_MM - 1, h, "•")
             pdf.multi_cell(TEXT_MM - BULLET_INDENT_MM, h, text, align="L", new_x="LMARGIN", new_y="NEXT")
         elif kind == "role" and dates:
             y = pdf.get_y()
-            pdf.set_font("Noto", "", STYLES["dates"][0])
+            pdf.set_font(FONT, "", STYLES["dates"][0])
             dates_w = pdf.get_string_width(dates)
             pdf.set_text_color(*GREY)
             pdf.set_xy(pdf.l_margin + TEXT_MM - dates_w, y)
             pdf.cell(dates_w, h, dates, align="R")
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Noto", style, size)
+            pdf.set_font(FONT, style, size)
             pdf.set_xy(pdf.l_margin, y)
             pdf.multi_cell(TEXT_MM - dates_w - 4, h, text, align="L", new_x="LMARGIN", new_y="NEXT")
         else:
