@@ -44,6 +44,20 @@ class RenderTests(unittest.TestCase):
             self.assertTrue(Path(f["path"]).is_file())
         self.assertEqual(resume.get_resume(self.store, "me")["render"]["files"][1]["format"], "pdf")
 
+    def test_saved_resume_with_claim_dicts_renders(self):  # bug 0.9.4.5: scope/contacts as dicts crashed blocks()
+        content = dict(self.content, contacts={"email": "ivan@example.invalid", "telegram": "@ivan"},
+                       summary=[{"text": "Рост выручки на 25% за 2023 год", "fact_ids": self.content["competencies"][0]["fact_ids"]}],
+                       education=[{"text": "МГУ, экономика, 2010", "fact_ids": []}],
+                       languages=[{"text": "Английский B2", "fact_ids": []}])
+        content["experience"] = [dict(self.content["experience"][0], scope={"text": "Команда 40 человек", "fact_ids": []})]
+        saved = resume.save_resume(self.store, "me", content, expected_version=self.saved["version"])
+        self.assertTrue(saved["validation"]["ok"], saved["validation"])
+        resume.approve_resume(self.store, "me", "main", saved["version"])
+        manifest = render.render_resume(self.store, "me", self.ws)
+        self.assertTrue(manifest["text_extraction"]["pdf"]["ok"], manifest["text_extraction"]["pdf"])
+        self.assertIn(("para", "Команда 40 человек"), render.blocks(content))
+        self.assertIn(("meta", "ivan@example.invalid · @ivan"), render.blocks(content))
+
     def test_extraction_check_catches_lost_line(self):
         lines = render.blocks(self.content)
         result = render.extraction_check(lines, "Иван Учебный")

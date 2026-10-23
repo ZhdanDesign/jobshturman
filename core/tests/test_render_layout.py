@@ -10,6 +10,20 @@ CONTENT = {"full_name": "Иван Учебный", "headline": "Коммерче
 
 
 class RenderLayoutTests(unittest.TestCase):
+    def test_claim_dicts_in_every_text_field(self):  # agents send {text, fact_ids} and dict contacts
+        content = {"full_name": {"text": "Иван Учебный"}, "contacts": {"email": "ivan@example.invalid", "phone": "+7 900"},
+                   "headline": {"text": "Коммерческий директор", "fact_ids": []},
+                   "summary": [{"text": "Про себя", "fact_ids": ["f1"]}],
+                   "experience": [{"employer": "Альфа", "title": {"text": "Директор"}, "start": "2021", "end": "2024",
+                                   "scope": {"text": "Команда 40 человек", "fact_ids": ["f1"]},
+                                   "bullets": [{"text": "Рост выручки на 25%", "fact_ids": ["f1"]}]}],
+                   "education": [{"text": "МГУ, 2010", "fact_ids": []}], "languages": [{"text": "Английский B2"}]}
+        self.assertEqual(blocks(content), [
+            ("name", "Иван Учебный"), ("meta", "ivan@example.invalid · +7 900"), ("title", "Коммерческий директор"),
+            ("section", "О себе"), ("para", "Про себя"), ("section", "Опыт работы"), ("role", "Директор, Альфа"),
+            ("meta", "2021 – 2024"), ("para", "Команда 40 человек"), ("bullet", "Рост выручки на 25%"),
+            ("section", "Образование"), ("bullet", "МГУ, 2010"), ("section", "Языки"), ("bullet", "Английский B2")])
+
     def test_lines_in_reading_order(self):
         self.assertEqual(blocks(CONTENT), [
             ("name", "Иван Учебный"), ("title", "Коммерческий директор"), ("section", "Опыт работы"),

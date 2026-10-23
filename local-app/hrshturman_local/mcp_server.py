@@ -7,6 +7,7 @@ import argparse
 import functools
 import inspect
 import os
+import traceback
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -79,22 +80,45 @@ GUIDE = """Как работать с инструментами JobShturman.
   география) — vacancy_constraints. Какие нужны этапу, видно в methodology_route. Их ответ не пересчитывай."""
 
 
-def tool_errors(fn):
+def _log_failure(log, name, exc):
+    """Append the traceback of an unexpected tool failure to the error log; never fails itself."""
+    if log is None:
+        return
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"--- {datetime.now(UTC).isoformat(timespec='seconds')} {name}\n")
+            fh.write("".join(traceback.format_exception(exc)))
+    except OSError:
+        pass
+
+
+def _tool_error(fn, exc, log):
+    """A domain refusal keeps its code; any other exception reaches the agent as `Type: text`."""
+    if isinstance(exc, DomainError):
+        return ToolError(f"{exc.code}: {exc}")
+    _log_failure(log, fn.__name__, exc)
+    where = f" (см. {log})" if log is not None else ""
+    return ToolError(f"{type(exc).__name__}: {exc}{where}")
+
+
+def tool_errors(fn, log=None):
+    """log: file for tracebacks of unexpected failures (the agent gets only the exception type and text)."""
     if inspect.iscoroutinefunction(fn):
         @functools.wraps(fn)
         async def async_wrapper(*args, **kwargs):
             try:
                 return await fn(*args, **kwargs)
-            except DomainError as exc:
-                raise ToolError(f"{exc.code}: {exc}") from exc
+            except Exception as exc:
+                raise _tool_error(fn, exc, log) from exc
         return async_wrapper
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except DomainError as exc:
-            raise ToolError(f"{exc.code}: {exc}") from exc
+        except Exception as exc:
+            raise _tool_error(fn, exc, log) from exc
     return wrapper
 
 
@@ -179,8 +203,10 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
     cid = settings.candidate_id
     mcp = MCPServer("hrshturman", instructions=(instructions or INSTRUCTIONS) + extra_instructions, log_level="WARNING")
 
+    error_log = settings.log_dir / "mcp-errors.log"
+
     def tool(fn):
-        return mcp.tool()(tool_errors(fn))
+        return mcp.tool()(tool_errors(fn, error_log))
 
     # --- status ---
 

@@ -21,6 +21,11 @@ class Settings:
     def db_path(self):
         return self.workspace / "workspace.sqlite3"
 
+    @property
+    def log_dir(self):
+        """`logs/` next to the workspace: the data folder's logs/ under `jbs`, ~/HRShturman/logs by default."""
+        return self.workspace.parent / "logs"
+
 
 def load():
     return Settings(

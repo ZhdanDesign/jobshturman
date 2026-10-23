@@ -1,5 +1,6 @@
 """End-to-end: a real MCP client talks to the server over stdio on a synthetic workspace."""
 import asyncio
+import functools
 import json
 import os
 import sys
@@ -250,3 +251,36 @@ class McpServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ToolErrorTests(unittest.TestCase):
+    """An unexpected failure reaches the agent as `Type: text`, and its traceback lands in logs/."""
+
+    def test_unexpected_exception_is_named_and_logged(self):
+        from hrshturman_core import DomainError
+        from hrshturman_local.mcp_server import tool_errors
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "logs" / "mcp-errors.log"
+
+            @functools.partial(tool_errors, log=log)
+            def resume_render():
+                raise AttributeError("'dict' object has no attribute 'strip'")
+
+            with self.assertRaises(ToolError) as ctx:
+                resume_render()
+            self.assertEqual(str(ctx.exception), f"AttributeError: 'dict' object has no attribute 'strip' (см. {log})")
+            text = log.read_text(encoding="utf-8")
+            self.assertIn("resume_render", text)
+            self.assertIn("Traceback", text)
+            self.assertIn("AttributeError: 'dict' object has no attribute 'strip'", text)
+
+            @functools.partial(tool_errors, log=log)
+            def refused():
+                raise DomainError("stale_inputs", "resume is a draft")
+
+            with self.assertRaises(ToolError) as ctx:
+                refused()
+            self.assertEqual(str(ctx.exception), "stale_inputs: resume is a draft")
+            self.assertEqual(log.read_text(encoding="utf-8"), text)  # a domain refusal is not logged
