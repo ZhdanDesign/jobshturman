@@ -16,7 +16,6 @@ from .models import CollectParams, RunRequest, SourceIn, SourceSpec
 from .service import Collector
 from .util import parse_dt
 
-
 INSTRUCTIONS = (
     "Vacancy collector for JobShturman. Sources: HeadHunter, Telegram channels, LinkedIn. "
     "Typical flow: list_sources -> run_collection -> search_vacancies -> get_vacancy. "

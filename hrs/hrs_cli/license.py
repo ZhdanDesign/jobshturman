@@ -39,6 +39,7 @@ OLD_SERVERS = ("https://tools.owai.ru/hrshturman/keys",)
 # Public key of the production bundle signing key (hrs-keys signing-key on the server).
 PUBLIC_KEYS: tuple[str, ...] = ("g0+l6EZh3voBDLJApGDmDOIPlaE7gXG0leEo/HzJsZ4=",)
 CHECK_EVERY = timedelta(hours=3)  # a release or an important methodology reaches the agent the same day
+CACHE_FOR = timedelta(seconds=60)  # how long BundleLibrary trusts its copy of the state and the bundle
 OFFLINE_GRACE = timedelta(days=7)
 WARN_BEFORE = timedelta(days=1)
 TIMEOUT = 15.0
@@ -147,11 +148,14 @@ def _client(server: str, http: httpx.Client | None):
 
 
 def _error(resp: httpx.Response) -> DomainError:
+    """The server's error as a DomainError; an HTML page from a proxy or an unexpected JSON shape is one too."""
     try:
         body = resp.json()
-        return DomainError(body.get("error", "server_error"), body.get("message", resp.text))
     except ValueError:
+        body = None
+    if not isinstance(body, dict):
         return DomainError("server_error", f"Сервер ключей ответил {resp.status_code}")
+    return DomainError(str(body.get("error") or "server_error"), str(body.get("message") or resp.text))
 
 
 def _remember_refusal(state: dict, exc: DomainError) -> None:
@@ -390,12 +394,34 @@ def view() -> dict:
 
 class BundleLibrary:
     """The methodology as the MCP server reads it: decrypted in memory, only while the key is valid.
-    Every Markdown text it gives out carries the watermark of the key."""
+    Every Markdown text it gives out carries the watermark of the key.
+
+    The decrypted bundle, the licence state and the parsed route are kept for CACHE_FOR as long as the bundle
+    and state files on disk have not changed: a stage read is then one zip lookup, not three key store reads
+    (a `security` process each on macOS), a decrypt and a signature check, repeated by the route lookup inside
+    the stage gate."""
 
     def __init__(self, reached=None):
         self.reached = reached  # () -> the furthest stage number the candidate's own data shows, or -1
+        self._cache = None  # (files key, opened at, state, decrypted bundle, route)
 
-    def _zip(self) -> zipfile.ZipFile:
+    @staticmethod
+    def _files_key() -> tuple:
+        out = []
+        for path in (state_file(), bundle_file()):
+            try:
+                st = path.stat()
+                out.append((st.st_mtime_ns, st.st_size))
+            except OSError:
+                out.append(None)
+        return tuple(out)
+
+    def _open(self) -> bytes:
+        """The decrypted bundle; self.state goes with it. Checks the key with the server when it is time."""
+        key = self._files_key()
+        if self._cache and self._cache[0] == key and now() - self._cache[1] < CACHE_FOR:
+            self.state = self._cache[2]
+            return self._cache[3]
         refresh()
         state = view()
         if not state["methodology"]:
@@ -403,7 +429,17 @@ class BundleLibrary:
         self.state = load()
         data = decrypt(bundle_file().read_bytes(), self.state)
         verify(data, self.state["bundle"]["signature"])
-        return zipfile.ZipFile(io.BytesIO(data))
+        self._cache = (self._files_key(), now(), self.state, data, None)
+        return data
+
+    def _zip(self) -> zipfile.ZipFile:
+        return zipfile.ZipFile(io.BytesIO(self._open()))
+
+    def _route(self, z: zipfile.ZipFile):
+        from hrshturman_core import methodology
+        if self._cache[4] is None:
+            self._cache = (*self._cache[:4], methodology.route(_ZipLibrary(z)))
+        return self._cache[4]
 
     def names(self) -> list[str]:
         with self._zip() as z:
@@ -414,13 +450,12 @@ class BundleLibrary:
         candidate is allowed to open now; opening a new stage is remembered."""
         if not GATED or not name.endswith(".md") or name in OPEN_TEXTS:
             return
-        from hrshturman_core import methodology
-        route = methodology.route(_ZipLibrary(z))
+        route = self._route(z)
         stage = next((s for s in route.stages if name.startswith(s.dir + "/")), None)
         if stage is None:
             raise DomainError("locked", "Этот текст методики не выдаётся: методика лицензирована для работы с "
                                         "кандидатом по этапам (stage_procedure), не для копирования")
-        state = self.state  # self.reached() below reads the bundle again and replaces self.state
+        state = self.state  # self.reached() below may read the bundle again and replace self.state
         opened = state.setdefault("opened", {})  # by a hash of the stage folder: no methodology names on disk
         mark = hashlib.sha256(stage.dir.encode()).hexdigest()[:16]
         if mark in opened:

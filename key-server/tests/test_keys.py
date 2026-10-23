@@ -254,3 +254,22 @@ def test_the_whole_methodology_is_never_given_out(server, library):
     events = server.get(f"/v1/admin/keys/{key['id']}/events", headers=ADMIN).json()
     assert any((e["kind"], e["detail"]) == ("denied", "export") for e in events)
     assert "/oferta/" in server.get("/v1/status", headers=auth(token)).json()["license_url"]
+
+
+def test_a_release_archive_is_signed_with_a_prefix_a_bundle_never_has(tmp_path, monkeypatch):
+    from cryptography.exceptions import InvalidSignature
+
+    from hrs_keys import cli
+    from hrs_keys.service import RELEASE_TAG
+    monkeypatch.setenv("HRS_KEYS_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("HRS_KEYS_SECRET", "s" * 40)
+    monkeypatch.setenv("HRS_KEYS_ADMIN_TOKEN", "admin-token-for-tests")
+    public = generate_signing_key(tmp_path / "data" / "signing_key.pem")
+    archive = tmp_path / "jobshturman-wheels.zip"
+    archive.write_bytes(b"PK..wheels")
+    assert cli.main(["sign-release", str(archive)]) == 0
+    signature = base64.b64decode((tmp_path / "jobshturman-wheels.zip.sig").read_text().strip())
+    key = Ed25519PublicKey.from_public_bytes(base64.b64decode(public))
+    key.verify(signature, RELEASE_TAG + archive.read_bytes())
+    with pytest.raises(InvalidSignature):
+        key.verify(signature, archive.read_bytes())  # the bare archive must never pass as a bundle

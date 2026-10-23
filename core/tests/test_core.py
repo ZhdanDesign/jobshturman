@@ -2,12 +2,12 @@
 import tempfile
 import threading
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 
-from hrshturman_core import DomainError, Store
+from hrshturman_core import DomainError, Store, intake, report, resume
 from hrshturman_core import applications as apps
-from hrshturman_core import intake, report, resume
 from hrshturman_core.common import canonical
 from hrshturman_core.workspace import create_candidate
 
@@ -15,7 +15,7 @@ PAST = "2026-01-01T10:00:00+00:00"
 
 
 def future(days=7):
-    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
 
 
 class Base(unittest.TestCase):
@@ -171,7 +171,7 @@ class ResumeTests(Base):
 
 
 class ApplicationTests(Base):
-    VAC = [{"source": " HH ", "external_id": "101", "title": "Коммерческий директор", "text": "Полный текст"},
+    VAC: ClassVar[list] = [{"source": " HH ", "external_id": "101", "title": "Коммерческий директор", "text": "Полный текст"},
            {"source": "telegram", "external_id": "chan-1:55", "title": "CFO", "text": None}]
 
     def imported(self):

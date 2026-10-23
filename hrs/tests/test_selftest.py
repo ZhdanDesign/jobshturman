@@ -5,9 +5,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from hrs_keys import bundle
-
 from hrs_cli import main, selftest, watermark
+from hrs_keys import bundle
 
 LIBRARY = (Path(__file__).resolve().parents[2] / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ"
            / "MD библиотека" / "Библиотека навыков")

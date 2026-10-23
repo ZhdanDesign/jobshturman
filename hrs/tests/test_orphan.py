@@ -5,7 +5,6 @@ import sys
 import time
 
 import pytest
-
 from hrs_cli import main
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="Windows does not hand orphans to another parent")

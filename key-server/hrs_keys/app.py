@@ -13,6 +13,16 @@ from pydantic import BaseModel, Field
 
 from .service import KeyServer, KeyServerError, Settings
 
+MAX_UPLOAD = 20 * 1024 * 1024  # a bundle or a draft file; anything bigger is not a methodology
+
+
+async def _body(file: UploadFile) -> bytes:
+    """The uploaded file, read no further than the limit: a huge upload must not fill the server's memory."""
+    data = await file.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise KeyServerError("too_large", f"Файл больше {MAX_UPLOAD // (1024 * 1024)} МБ", 413)
+    return data
+
 
 class Activate(BaseModel):
     key: str = Field(max_length=64)
@@ -246,7 +256,7 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
     @app.post(m + "/upload")
     async def draft_upload(file: UploadFile, path: str | None = Query(None, max_length=300),
                            role: str = Depends(editor)):
-        return ks.draft_upload(file.filename or "file", await file.read(), role, path)
+        return ks.draft_upload(file.filename or "file", await _body(file), role, path)
 
     @app.post(m + "/import-current")
     def draft_import(role: str = Depends(editor)):
@@ -283,7 +293,7 @@ def create_app(settings: Settings | None = None, admin_origins: list[str] | None
 
     @app.post("/v1/admin/bundles", dependencies=a, status_code=201)
     async def publish(file: UploadFile, note: str = Form(""), important: bool = Form(False)):
-        return ks.publish(await file.read(), note=note, important=important)
+        return ks.publish(await _body(file), note=note, important=important)
 
     @app.get("/v1/admin/signing-key", dependencies=a)
     def signing_key():

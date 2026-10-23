@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import datetime
+from typing import ClassVar
 
 from bs4 import BeautifulSoup
 
@@ -27,7 +28,7 @@ BASE = "https://www.linkedin.com/jobs-guest/jobs/api"
 
 def _has_markup(text: str) -> bool:
     """Past the last page LinkedIn answers 200 with only a doctype and an empty comment."""
-    rest = re.sub(r"<!DOCTYPE[^>]*>|<!--.*?-->", "", text, flags=re.S | re.I)
+    rest = re.sub(r"<!DOCTYPE[^>]*>|<!--.*?-->", "", text, flags=re.DOTALL | re.IGNORECASE)
     return bool(rest.strip())
 
 
@@ -40,7 +41,7 @@ class LinkedInGuestAdapter(SourceAdapter):
     transport = "linkedin_guest"
     version = "linkedin_guest/0.1.0"
     date_ordered = False
-    limits = [
+    limits: ClassVar[list[str]] = [
         "anonymous guest pages: no applications, no messages, no profile data",
         "publication dates have day precision; results are not date-ordered, the time window is a platform filter",
         "linkedin throttles anonymous traffic (429/999); keep page_budget small",

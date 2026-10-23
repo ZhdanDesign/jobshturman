@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import html
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
@@ -11,15 +11,15 @@ from .models import Contacts
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(microsecond=0)
+    return datetime.now(UTC).replace(microsecond=0)
 
 
 def as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def parse_dt(value: str | None) -> datetime | None:
@@ -105,7 +105,7 @@ _VACANCY_HINTS = re.compile(
 
 
 def guess_is_vacancy(text: str) -> str:
-    hits = len(set(m.group(0).lower()[:6] for m in _VACANCY_HINTS.finditer(text)))
+    hits = len({m.group(0).lower()[:6] for m in _VACANCY_HINTS.finditer(text)})
     if hits >= 2:
         return "likely"
     if hits == 0 and len(text) > 0:

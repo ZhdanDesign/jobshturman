@@ -251,7 +251,7 @@ class Collector:
         except SourceError as exc:
             result = None
             error = exc
-        except Exception as exc:  # adapter bug: keep the run going, record it
+        except Exception as exc:  # noqa: BLE001 - adapter bug: keep the run going, record it
             result = None
             error = SourceError("internal_error", f"{type(exc).__name__}: {exc}", can_retry=True)
             traceback.print_exc()

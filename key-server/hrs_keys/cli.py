@@ -2,6 +2,7 @@
 
   hrs-keys serve [--host 127.0.0.1 --port 8098]
   hrs-keys signing-key                      create the bundle signing key, print the public key for hrs
+  hrs-keys sign-release FILE                sign a release archive (jobshturman-wheels.zip): writes FILE.sig
   hrs-keys tariffs
   hrs-keys issue <tariff> [--months N | --until DATE] [--order REF] [--devices N]
   hrs-keys list [--state active|expiring|expired|revoked]
@@ -36,6 +37,7 @@ def main(argv=None) -> int:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8098)
     sub.add_parser("signing-key")
+    sub.add_parser("sign-release").add_argument("file")
     sub.add_parser("tariffs")
     p = sub.add_parser("issue")
     p.add_argument("tariff")
@@ -109,6 +111,10 @@ def main(argv=None) -> int:
             _print(ks.restore(args.key_id))
         elif args.cmd == "reset-devices":
             _print(ks.reset_devices(args.key_id))
+        elif args.cmd == "sign-release":
+            signature = ks.sign_release(Path(args.file).read_bytes())
+            Path(args.file + ".sig").write_text(signature + "\n", encoding="utf-8")
+            _print({"file": args.file, "signature": args.file + ".sig"})
         elif args.cmd == "bundle":
             _print(ks.publish(Path(args.file).read_bytes(), note=args.note, important=args.important))
         elif args.cmd == "watermark":

@@ -15,6 +15,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from hrs_cli import license
+from hrs_cli.server import build
 from hrs_keys import bundle
 from hrs_keys.app import create_app
 from hrs_keys.service import Settings, generate_signing_key, iso, now
@@ -22,9 +24,6 @@ from mcp import Client
 from test_hrs import resume_docx
 from test_license import ADMIN, issue, plain
 from test_selftest import CHANNELS, LIBRARY
-
-from hrs_cli import license
-from hrs_cli.server import build
 
 pytestmark = pytest.mark.skipif(not LIBRARY.is_dir(), reason="нет библиотеки методики рядом с кодом")
 POLICY = {"salary_min": 300000, "formats": ["REMOTE", "HYBRID"], "locations": ["Москва"]}

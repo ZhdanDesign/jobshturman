@@ -4,9 +4,16 @@ Delivery state and employer funnel are separate models (spec section 12).
 Vacancies arrive through import_vacancies in a neutral format; the adapter for
 collector/CONTRACT.md converts into it. This module never parses sources.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from .common import DomainError, check_id, digest, parse_time, redact_secrets, reject_secrets
+from .common import (
+    DomainError,
+    check_id,
+    digest,
+    parse_time,
+    redact_secrets,
+    reject_secrets,
+)
 from .workspace import get_candidate
 
 VACANCY_FIELDS = {"source", "external_id", "url", "title", "company", "text", "published_at", "collected_at",
@@ -136,7 +143,7 @@ def auto_approve(store, candidate_id, application_id, expected_version, policy, 
 
 def auto_authorize(store, candidate_id, application_id, expected_version, policy, actor="auto_policy"):
     """Automatic mode: permission for the current package, valid one day, while the mode stays on."""
-    expiry = datetime.now(timezone.utc) + timedelta(days=1)
+    expiry = datetime.now(UTC) + timedelta(days=1)
 
     def change(app, _):
         _require(app, {"draft_ready"}, "authorize automatically")
@@ -166,7 +173,7 @@ def authorize(store, candidate_id, application_id, expected_version, material_ha
               actor="candidate"):
     """The candidate approves this exact package for this channel until expires_at."""
     expiry = parse_time(expires_at, "expires_at")
-    if expiry <= datetime.now(timezone.utc):
+    if expiry <= datetime.now(UTC):
         raise DomainError("expired_authority", "expires_at is in the past")
 
     def change(app, _):
@@ -190,7 +197,7 @@ def _check_authority(app):
     auth = app["authority"]
     if not auth or auth["revoked"]:
         raise DomainError("revoked_authority", "No active authority")
-    if datetime.fromisoformat(auth["expires_at"]) <= datetime.now(timezone.utc):
+    if datetime.fromisoformat(auth["expires_at"]) <= datetime.now(UTC):
         raise DomainError("expired_authority", "Authority expired")
     if auth["material_hash"] != app["material"]["hash"]:
         raise DomainError("invalid_material", "Package changed after authorization")
@@ -201,7 +208,7 @@ def _evidence(evidence, need):
         raise DomainError("invalid_schema", "evidence needs observed_at and proof_ref")
     reject_secrets(evidence)
     stamp = parse_time(evidence["observed_at"], "observed_at")
-    if stamp > datetime.now(timezone.utc):
+    if stamp > datetime.now(UTC):
         raise DomainError("invalid_schema", "observed_at is in the future")
     for field in need:
         if not str(evidence.get(field) or "").strip():
@@ -233,7 +240,7 @@ def reserve(store, candidate_id, application_id, expected_version, worker, actor
         vac, channel = app["vacancy"], app["material"]["channel"]
         return {"state": "sending", "operation_id": app["operation_id"] or
                 f"{candidate_id}:{channel}:apply:{vac['source']}:{vac['external_id']}",
-                "attempt": {"worker": worker, "started_at": datetime.now(timezone.utc).isoformat()}}
+                "attempt": {"worker": worker, "started_at": datetime.now(UTC).isoformat()}}
     return _mutate(store, candidate_id, application_id, expected_version, actor, change, "reserved")
 
 

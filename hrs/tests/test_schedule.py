@@ -5,7 +5,7 @@ import os
 import plistlib
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -18,7 +18,7 @@ from hrs_collector.store import Store as CollectorStore
 from hrshturman_core import applications as apps
 from hrshturman_core import schedule as core
 
-NOON = datetime(2026, 10, 20, 11, 0, tzinfo=timezone.utc)  # 14:00 in Moscow, outside quiet hours
+NOON = datetime(2026, 10, 20, 11, 0, tzinfo=UTC)  # 14:00 in Moscow, outside quiet hours
 POST = "<b>Вакансия: Финансовый директор (CFO)</b><br/>Москва, гибрид. Резюме: cv@example.com"
 
 
@@ -66,7 +66,7 @@ def test_windows_and_linux_plans(tmp_path, monkeypatch):
     win = {step["task"]: step["run"] for step in schedule.plan(settings, "win32")}
     create = [c for c in win["reminders"] if c[1] == "/Create"]
     assert [c[c.index("/ST") + 1] for c in create] == ["12:00", "16:00", "19:00"]
-    assert "schedule run reminders" in create[0][-1]
+    assert create[0][-1].endswith('reminders.cmd"')  # Task Scheduler runs the .cmd, not a 261-character line
     linux = {step["task"]: step for step in schedule.plan(settings, "linux")}
     timer = next(body for path, body in linux["digest"]["write"].items() if path.endswith(".timer"))
     assert "OnCalendar=*-*-* 08:30:00" in timer and "Persistent=true" in timer
@@ -87,7 +87,7 @@ def test_runs_collect_digest_and_reminders_without_the_agent(tmp_path, monkeypat
 
     collected = schedule.run("collect", collector=collector)
     assert collected["imported"]["added"] == 1
-    monkeypatch.setattr(schedule, "_license_info", lambda: {})
+    monkeypatch.setattr(schedule, "_license_info", dict)
     digest = schedule.run("digest")
     assert digest["counts"]["new"] == 1 and digest["notified"]
     assert "Сводка JobShturman" in (paths.settings().workspace / "digest.md").read_text(encoding="utf-8")
@@ -149,7 +149,7 @@ def test_the_schedule_switches_itself_on_and_puts_back_what_went_missing(tmp_pat
     home(tmp_path, monkeypatch)
     monkeypatch.delenv("HRS_SCHEDULE", raising=False)
     calls = []
-    runner = lambda cmd: calls.append(cmd) or 0  # noqa: E731
+    runner = lambda cmd: calls.append(cmd) or 0
     first = schedule.ensure(platform="darwin", runner=runner)
     assert sorted(first["restored"]) == ["collect", "digest", "license", "reminders", "wake", "watch"]
     assert schedule.ensure(platform="darwin", runner=runner) == {"restored": []}
@@ -317,13 +317,37 @@ def test_wake_asks_the_person_to_log_in_when_the_agent_session_expired(tmp_path,
     settings = core.get_settings(store, s.candidate_id)
     day = datetime.now().astimezone().replace(hour=14, minute=0, second=0, microsecond=0)
 
-    expired = lambda cmd, cwd, env: (1, "API Error: 401 OAuth session expired. Please run /login")  # noqa: E731
+    expired = lambda cmd, cwd, env: (1, "API Error: 401 OAuth session expired. Please run /login")
     out = wake.run(settings, now=day, runner=expired)
     assert out["error"] == "login" and out["notified"]
     shown = capsys.readouterr().out
     assert "войдите в Claude" in shown.replace(" ", " ")
     assert "/login" in wake.wake_file().read_text(encoding="utf-8")
 
-    other = lambda cmd, cwd, env: (1, "Traceback: something else broke")  # noqa: E731
+    other = lambda cmd, cwd, env: (1, "Traceback: something else broke")
     out = wake.run(settings, now=day, runner=other)
     assert out["error"] != "login" and "notified" not in out
+
+    site = lambda cmd, cwd, env: (1, ("hh.ru answered HTTP 401 to the application form (unauthorized); its OAuth "
+                                      "page asked for a login"))  # the site, not the agent, lost its session
+    out = wake.run(settings, now=day, runner=site)
+    assert out["error"] != "login"
+
+
+def test_windows_tasks_and_systemd_units_carry_the_data_folder(tmp_path, monkeypatch):
+    """A person with HRSHTURMAN_HOME somewhere else got launchd tasks with it but Task Scheduler tasks without:
+    those ran against an empty default folder. Paths with spaces must survive in systemd units too."""
+    home(tmp_path, monkeypatch)
+    monkeypatch.setenv("HRSHTURMAN_HOME", str(tmp_path / "my data"))
+    s, store = schedule.store_for()
+    settings = core.get_settings(store, s.candidate_id)
+    win = {step["task"]: step for step in schedule.plan(settings, "win32")}
+    (path, body), = win["collect"]["write"].items()
+    assert path.endswith("collect.cmd") and win["collect"]["run"][-1][-1] == f'"{path}"'
+    assert f'set "HRSHTURMAN_HOME={tmp_path / "my data"}"\r\n' in body and "schedule run collect" in body
+    assert body.startswith("@echo off\r\n") and body.endswith('collect.log" 2>&1\r\n')
+    linux = {step["task"]: step for step in schedule.plan(settings, "linux")}
+    service = next(body for p, body in linux["collect"]["write"].items() if p.endswith(".service"))
+    assert f'Environment="HRSHTURMAN_HOME={tmp_path / "my data"}"\n' in service
+    off = dict(settings, tasks={t: dict(e, enabled=False) for t, e in settings["tasks"].items()})
+    assert all("remove" in step for step in schedule.plan(off, "win32"))

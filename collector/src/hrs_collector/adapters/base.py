@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from ..errors import SourceError
 from ..http import Http
@@ -35,8 +35,8 @@ class SourceAdapter(ABC):
     platform: str
     transport: str
     version: str
-    supported_operations: list[str] = ["probe_capabilities", "collect_batch", "fetch_full_item"]
-    limits: list[str] = []
+    supported_operations: ClassVar[list[str]] = ["probe_capabilities", "collect_batch", "fetch_full_item"]
+    limits: ClassVar[list[str]] = []
 
     def __init__(self, http: Http, credentials: Credentials | None = None) -> None:
         self.http = http

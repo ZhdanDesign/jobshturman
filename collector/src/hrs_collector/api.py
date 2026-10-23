@@ -30,8 +30,8 @@ from .models import (
     Source,
     SourceIn,
     SourceSpec,
-    VacancyPage,
     Vacancy,
+    VacancyPage,
 )
 from .service import Collector
 

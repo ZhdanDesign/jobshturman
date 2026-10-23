@@ -11,9 +11,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from hrshturman_core import DomainError
+from hrshturman_core import DomainError, report
 from hrshturman_core import applications as apps
-from hrshturman_core import report
 
 CONTRACT_VERSION = "1.0"
 READ_OK = {"ok", "no_new"}

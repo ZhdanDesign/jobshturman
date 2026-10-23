@@ -7,9 +7,8 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from hrshturman_core import DomainError, Store
+from hrshturman_core import DomainError, Store, report
 from hrshturman_core import applications as apps
-from hrshturman_core import report
 from hrshturman_core.workspace import create_candidate
 from hrshturman_local import collector_feed
 

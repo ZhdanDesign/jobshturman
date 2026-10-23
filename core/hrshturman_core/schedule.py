@@ -6,7 +6,7 @@ same reminders and digest through MCP tools. Nothing here applies to a vacancy o
 employer: those stay with the person (stages 16 and 18).
 """
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .common import DomainError, now
@@ -169,7 +169,7 @@ def record_run(store, candidate_id, task, result, actor="scheduler"):
 
 def _aware(stamp):
     value = datetime.fromisoformat(stamp)
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def _age(stamp, at):
@@ -240,7 +240,7 @@ def _states(store, candidate_id):
 
 def reminders(store, candidate_id, at=None, license_info=None):
     """Active reminders: the rules that hold now, minus those closed for this same state or snoozed."""
-    at = at or datetime.now(timezone.utc)
+    at = at or datetime.now(UTC)
     states = _states(store, candidate_id)
     active = []
     for item in _rules(store, candidate_id, at, license_info):
@@ -275,7 +275,7 @@ def _find_active(store, candidate_id, reminder_id, at, license_info):
 
 def reminder_done(store, candidate_id, reminder_id, actor="candidate_via_agent", at=None, license_info=None):
     """Close a reminder for the current state; it comes back only if the state changes."""
-    item = _find_active(store, candidate_id, reminder_id, at or datetime.now(timezone.utc), license_info)
+    item = _find_active(store, candidate_id, reminder_id, at or datetime.now(UTC), license_info)
     return _update_reminder(store, candidate_id, reminder_id, {"done_fingerprint": item["fingerprint"],
                                                                 "snoozed_until": None}, actor, "reminder_done")
 
@@ -283,7 +283,7 @@ def reminder_done(store, candidate_id, reminder_id, actor="candidate_via_agent",
 def reminder_snooze(store, candidate_id, reminder_id, hours, actor="candidate_via_agent", at=None, license_info=None):
     if not isinstance(hours, (int, float)) or not 0 < hours <= SNOOZE_MAX_HOURS:
         raise DomainError("invalid_schema", f"hours: from 1 to {SNOOZE_MAX_HOURS}")
-    at = at or datetime.now(timezone.utc)
+    at = at or datetime.now(UTC)
     _find_active(store, candidate_id, reminder_id, at, license_info)
     until = (at + timedelta(hours=hours)).isoformat()
     return _update_reminder(store, candidate_id, reminder_id, {"snoozed_until": until}, actor, "reminder_snoozed")
@@ -301,7 +301,7 @@ quiet = _quiet
 def pick_notification(store, candidate_id, at=None, license_info=None, actor="scheduler"):
     """One reminder for a system notification: not in quiet hours, not more than max_per_day a day,
     never the same reminder twice for the same state. Marks it shown."""
-    at = at or datetime.now(timezone.utc)
+    at = at or datetime.now(UTC)
     with store.read() as tx:
         cand = get_candidate(tx, candidate_id)
     if cand["paused"]:
@@ -329,7 +329,7 @@ def pick_notification(store, candidate_id, at=None, license_info=None, actor="sc
 
 def digest(store, candidate_id, since=None, at=None, license_info=None):
     """What changed since the last digest and what waits for the person. Same data for the file and the agent."""
-    at = at or datetime.now(timezone.utc)
+    at = at or datetime.now(UTC)
     with store.read() as tx:
         get_candidate(tx, candidate_id)
         apps = tx.list("application", candidate_id)
@@ -356,8 +356,8 @@ def digest(store, candidate_id, since=None, at=None, license_info=None):
 def _digest_markdown(counts, top, waiting, at):
     lines = [f"# Сводка JobShturman на {at.date().isoformat()}", "",
              f"- Новых вакансий: {counts['new']}, без оценки: {counts['unscored']}.",
-             f"- Ждут вашего решения: {counts['waiting_decision']}, ждут разрешения на отклик: "
-             f"{counts['waiting_permission']}.",
+             (f"- Ждут вашего решения: {counts['waiting_decision']}, ждут разрешения на отклик: "
+             f"{counts['waiting_permission']}."),
              f"- Отправлено откликов: {counts['sent']}, приглашений: {counts['invited']}.", ""]
     if top:
         lines += ["## Лучшие вакансии", ""]

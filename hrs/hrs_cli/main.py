@@ -45,9 +45,19 @@ def schedule_check() -> None:
         from . import schedule
         try:
             schedule.ensure()
-        except Exception:  # noqa: BLE001 - the agent's session never waits for or fails on the scheduler
+        except Exception:  # noqa: BLE001, S110 - the agent's session never waits for or fails on the scheduler
             pass
     threading.Thread(target=go, daemon=True).start()
+
+
+def _exit_now(code: int) -> None:
+    """os._exit skips atexit: let go of the self-update hold first, or the update promised «after the agent
+    closes» never starts for a serve that ends this way."""
+    import os
+
+    from . import selfupdate
+    selfupdate.release_all()
+    os._exit(code)
 
 
 def exit_with_parent(interval: float = 30, getppid=None, stop=None, rounds=None) -> None:
@@ -60,7 +70,7 @@ def exit_with_parent(interval: float = 30, getppid=None, stop=None, rounds=None)
     if os.name == "nt":
         return
     getppid = getppid or os.getppid
-    stop = stop or os._exit
+    stop = stop or _exit_now
     first = getppid()
     if first == 1:  # started by launchd or systemd, not by an agent
         return

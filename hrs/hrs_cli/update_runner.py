@@ -19,7 +19,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 WAIT_PARENT = 120  # seconds
@@ -121,7 +121,7 @@ def _install(job: dict, wheels: str, version: str, run) -> tuple[int, str]:
 def apply(job: dict, run=_run) -> dict:
     """Install the new release; on failure put the old one back. Returns what happened."""
     result = {"from": job["from"], "to": job["to"], "notes": job.get("notes", ""),
-              "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+              "at": datetime.now(UTC).isoformat(timespec="seconds")}
     busy = running(Path(job["pids"]))
     if busy and not IN_PLACE:
         return result | {"ok": False, "error": "busy", "message": "JobShturman ещё работает у агента; обновлю, когда он закроется"}
@@ -131,9 +131,12 @@ def apply(job: dict, run=_run) -> dict:
         if code == 0 and job["to"] not in log:
             code, log = 1, f"после установки другая версия: {log.strip()}"
     if code != 0:
+        failed = result | {"ok": False, "error": "install", "message": log.strip()[-600:]}
+        if not job.get("old_wheels"):  # the current release left no wheels behind (see selfupdate._old_wheels)
+            return failed | {"rolled_back": False, "rollback_log": "нет колёс прежней версии: переустановите "
+                                                                   "JobShturman по инструкции с сайта"}
         back, back_log = _install(job, job["old_wheels"], job["from"], run)
-        return result | {"ok": False, "error": "install", "message": log.strip()[-600:],
-                         "rolled_back": back == 0, **({} if back == 0 else {"rollback_log": back_log[-600:]})}
+        return failed | {"rolled_back": back == 0, **({} if back == 0 else {"rollback_log": back_log[-600:]})}
     setup = [job["hrs"], "setup", "--skill-dir", job["skill_dir"], *(["--from-plugin"] if job.get("from_plugin") else [])]
     code, log = run(setup, timeout=300)
     return result | {"ok": True, "setup_ok": code == 0, **({} if code == 0 else {"setup_log": log.strip()[-600:]})}

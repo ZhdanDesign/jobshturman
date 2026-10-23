@@ -21,7 +21,14 @@ from datetime import datetime, timedelta
 
 from .adapters import Page, SourceAdapter
 from .errors import SourceError
-from .models import BatchResult, CollectParams, Coverage, CursorState, SourceSpec, VacancyData
+from .models import (
+    BatchResult,
+    CollectParams,
+    Coverage,
+    CursorState,
+    SourceSpec,
+    VacancyData,
+)
 from .util import as_utc, utcnow
 
 OnPage = Callable[[list[VacancyData], CursorState], None]

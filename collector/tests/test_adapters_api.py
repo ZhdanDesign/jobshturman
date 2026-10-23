@@ -4,9 +4,8 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
 from conftest import T0, hh_search_page, hh_vacancy, mock_http, tg_page
+from fastapi.testclient import TestClient
 from hrs_collector.adapters.hh import HHApiAdapter, HHWebAdapter
 from hrs_collector.adapters.linkedin import LinkedInGuestAdapter
 from hrs_collector.adapters.telegram_web import TelegramWebAdapter

@@ -5,13 +5,12 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from hrshturman_core import report
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-from hrshturman_core import report
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBRARY = ROOT / "MetaProject_Job_Search_—_Specifications_and_Library" / "ФИНАЛЬНОЕ" / "MD библиотека" / "Библиотека навыков"
@@ -38,15 +37,14 @@ class McpServerTests(unittest.TestCase):
 
     def run_session(self, scenario):
         async def go():
-            async with stdio_client(self.params) as (read, write):
-                async with ClientSession(read, write) as session:
+            async with stdio_client(self.params) as (read, write), ClientSession(read, write) as session:
                     await session.initialize()
                     return await scenario(session)
         return asyncio.run(go())
 
     def test_full_local_route(self):
         async def scenario(s):
-            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            call = lambda name, **kw: s.call_tool(name, kw)
             tools = {t.name for t in (await s.list_tools()).tools}
             self.assertTrue({"status_report", "intake_save_draft", "resume_save", "application_record_sent"} <= tools)
 
@@ -77,7 +75,7 @@ class McpServerTests(unittest.TestCase):
                                      expected_version=app["version"], decision="approve", reason="интересно"))
             app = payload(await call("application_prepare", application_id=app["object_id"],
                                      expected_version=app["version"], material={"cv": "v1"}, channel="hh-main"))
-            expires = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+            expires = (datetime.now(UTC) + timedelta(days=3)).isoformat()
             app = payload(await call("application_authorize", application_id=app["object_id"],
                                      expected_version=app["version"], material_hash=app["material"]["hash"],
                                      channel="hh-main", expires_at=expires))
@@ -127,7 +125,7 @@ class McpServerTests(unittest.TestCase):
 
     def test_checks_run_as_tools(self):  # S5: stage 06, 09-19 and 15 checks are code, not prose
         async def scenario(s):
-            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            call = lambda name, **kw: s.call_tool(name, kw)
             payload(await call("vacancies_import", items=[{
                 "source": "hh", "external_id": "1", "title": "CCO", "location": "Казань", "work_format": ["ON_SITE"],
                 "salary": {"min": 150000, "max": 200000, "currency": "RUR", "gross": True, "period": None}}]))
@@ -149,7 +147,7 @@ class McpServerTests(unittest.TestCase):
 
     def test_screen_and_ranked_list(self):  # every vacancy shown to the person carries a 1-5 rank
         async def scenario(s):
-            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            call = lambda name, **kw: s.call_tool(name, kw)
             payload(await call("vacancies_import", items=[
                 {"source": "hh", "external_id": str(i), "title": t, "text": "описание", "salary": sal}
                 for i, (t, sal) in enumerate([
@@ -175,12 +173,12 @@ class McpServerTests(unittest.TestCase):
         self.params.env["HRS_SEND_PAUSE"] = "0"
 
         async def scenario(s):
-            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            call = lambda name, **kw: s.call_tool(name, kw)
             fact = payload(await call("fact_add", assertion="Рост выручки на 25%", employer="Альфа",
                                       source_refs=[{"source_id": "cv", "locator": "p1"}]))
             payload(await call("vacancies_import", items=[{"source": "hh", "external_id": str(i), "title": "CCO",
                                                            "text": "Полный текст"} for i in range(41)]))
-            expires = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+            expires = (datetime.now(UTC) + timedelta(days=3)).isoformat()
             results = []
             for app in payload(await call("applications_list")):
                 for name, kw in (("application_score", {"preliminary": 4, "final": 4, "why": "Совпадает",
@@ -201,7 +199,7 @@ class McpServerTests(unittest.TestCase):
 
     def test_automatic_mode_takes_only_high_ranks_and_keeps_a_pause(self):
         async def scenario(s):
-            call = lambda name, **kw: s.call_tool(name, kw)  # noqa: E731
+            call = lambda name, **kw: s.call_tool(name, kw)
             fact = payload(await call("fact_add", assertion="Рост выручки на 25%", employer="Альфа",
                                       source_refs=[{"source_id": "cv", "locator": "p1"}]))
             payload(await call("vacancies_import", items=[{"source": "hh", "external_id": str(i), "title": t,

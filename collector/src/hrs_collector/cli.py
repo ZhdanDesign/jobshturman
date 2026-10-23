@@ -9,19 +9,15 @@ import sys
 from pathlib import Path
 
 from . import credentials as creds_mod
-from .models import CollectParams, Credentials, RunRequest, SourceIn, SourceSpec, TelegramCredentials
+from .models import (
+    CollectParams,
+    Credentials,
+    RunRequest,
+    SourceIn,
+    SourceSpec,
+    TelegramCredentials,
+)
 from .service import Collector, default_data_dir
-
-REGISTRY_NAME = "02 Полный реестр Telegram каналов.csv"
-
-
-def find_registry() -> Path | None:
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        hits = sorted(parent.glob(f"*/ФИНАЛЬНОЕ/{REGISTRY_NAME}"))
-        if hits:
-            return hits[0]
-    return None
 
 
 def _print(obj) -> None:
@@ -39,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("import-telegram", help="import the 210-channel CSV registry")
-    p.add_argument("--csv", type=Path)
+    p.add_argument("--csv", type=Path, required=True, help="the channel registry CSV (not part of the program)")
 
     p = sub.add_parser("add-hh", help="add an hh.ru search query")
     p.add_argument("source_id")
@@ -103,11 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     cid = args.candidate
 
     if args.cmd == "import-telegram":
-        path = args.csv or find_registry()
-        if path is None:
-            print("registry CSV not found; pass --csv", file=sys.stderr)
-            return 2
-        _print(core.import_telegram_registry(cid, path) | {"csv": str(path)})
+        _print(core.import_telegram_registry(cid, args.csv) | {"csv": str(args.csv)})
     elif args.cmd == "add-hh":
         spec = SourceSpec(platform="hh", transport="hh_api" if args.api else "hh_web", kind="search",
                           config={"text": args.text, **({"area": args.area} if args.area else {})})

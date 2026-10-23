@@ -4,9 +4,9 @@ import subprocess
 import sys
 
 import pytest
-from test_license import issue, keys  # noqa: F401 (fixture)
-
 from hrs_cli import keystore, license
+from hrshturman_core import DomainError
+from test_license import issue, keys  # noqa: F401 (fixture)
 
 
 def files_with(root, secret):
@@ -68,3 +68,54 @@ def test_macos_keychain(keys, tmp_path, monkeypatch):  # noqa: F811
         assert license.BundleLibrary().read("skills/stage-07-master-cv/references/procedure.md")
     finally:
         subprocess.run(["security", "delete-keychain", str(chain)], check=False)
+
+
+def fake_security(tmp_path, monkeypatch, log):
+    """A `security` that keeps passwords in a file and writes every call to the log; any platform."""
+    exe = tmp_path / "bin" / "security"
+    exe.parent.mkdir(exist_ok=True)
+    exe.write_text(f'''#!/bin/sh
+PATH=/usr/bin:/bin:$PATH  # the test leaves only this folder on PATH
+echo "$@" >> "{log}"
+db="{tmp_path / 'chain'}"
+case "$1" in
+  -i) read line; echo "$line" >> "{log}"; set -- $line
+      case "$1" in add-generic-password) echo "$6 $8" >> "$db"; exit 0;; esac; exit 1;;
+  find-generic-password) grep "^$5 " "$db" 2>/dev/null | tail -1 | cut -d" " -f2 | grep . && exit 0 || exit 44;;
+  delete-generic-password) grep -v "^$5 " "$db" > "$db.new" 2>/dev/null; mv "$db.new" "$db"; exit 0;;
+esac
+exit 1
+''', encoding="utf-8")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", str(exe.parent))
+    monkeypatch.delenv("HRS_KEYSTORE", raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    return keystore.store()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell script stands in for `security`")
+def test_the_keychain_store_talks_to_security_and_never_puts_the_key_on_the_command_line(tmp_path, monkeypatch):
+    log = tmp_path / "security.log"
+    store = fake_security(tmp_path, monkeypatch, log)
+    assert store.name == "keychain" and store.warning is None
+    store.save("install-1", "HRS-AAAA-BBBB")
+    assert store.load("install-1") == "HRS-AAAA-BBBB" and store.load("install-2") is None
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert calls[0] == "-i" and "HRS-AAAA-BBBB" not in calls[0]  # the key went through stdin
+    assert any("find-generic-password -s hrshturman -a install-1 -w" in c for c in calls)
+    store.delete("install-1")
+    assert store.load("install-1") is None
+    with pytest.raises(DomainError) as exc:  # a key with quotes or spaces would break the security command line
+        store.save("install-1", 'HRS-AA"AA')
+    assert exc.value.code == "invalid_key"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell script stands in for `security`")
+def test_a_failing_security_is_a_keychain_error_not_a_crash(tmp_path, monkeypatch):
+    log = tmp_path / "security.log"
+    store = fake_security(tmp_path, monkeypatch, log)
+    (tmp_path / "bin" / "security").write_text("#!/bin/sh\necho 'security: SecKeychainItemCreateFromContent error' >&2\nexit 1\n")
+    with pytest.raises(DomainError) as exc:
+        store.save("install-1", "HRS-AAAA")
+    assert exc.value.code == "keychain_error"
+    assert store.load("install-1") is None

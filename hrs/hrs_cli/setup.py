@@ -66,7 +66,9 @@ def _toml_str(value: str) -> str:
 
 def browser_server() -> tuple[str, list[str]] | None:
     """Command and args for the Playwright MCP server, or None without Node.js.
-    The flags keep pages out of the model's context unless asked: a full hh.ru vacancy snapshot costs ~11k tokens."""
+    The flags keep pages out of the model's context unless asked: a full hh.ru vacancy snapshot costs ~11k tokens.
+    --allow-unrestricted-file-access stays: the resume the agent attaches on hh.ru lies in the data folder, and
+    the agent's workspace roots (the only files Playwright allows by default) are usually another folder."""
     npx = shutil.which("npx")
     if not npx:
         return None
@@ -201,13 +203,26 @@ def setup_openclaw(command: str, name: str = SERVER, args: list[str] | None = No
 AGENTS = (setup_claude, setup_codex, setup_grok, setup_hermes, setup_openclaw)
 
 
+def _each_agent(*args, **kwargs) -> list[dict]:
+    """One agent's broken config (a TOML error in ~/.codex/config.toml, a CLI that hangs) must not stop the
+    others from being connected: that agent gets status error in the report, the rest go on."""
+    done = []
+    for setup in AGENTS:
+        agent = setup.__name__.removeprefix("setup_")
+        try:
+            done.append(setup(*args, **kwargs))
+        except Exception as exc:  # noqa: BLE001 - reported per agent, the install goes on
+            done.append({"agent": agent, "status": "error", "message": f"{type(exc).__name__}: {exc}"})
+    return done
+
+
 def setup_browser() -> list[dict]:
     server = browser_server()
     if server is None:
         return [{"agent": "browser", "status": "needs_node",
                  "message": "Нет Node.js: агент не сможет откликаться через браузер. Поставьте Node.js LTS и повторите jbs setup"}]
     command, args = server
-    return [setup(command, name=BROWSER, args=args) for setup in AGENTS]
+    return _each_agent(command, name=BROWSER, args=args)
 
 
 def install_skill(skill_dir: Path, targets: list[Path]) -> list[dict]:
@@ -228,7 +243,7 @@ def install_skill(skill_dir: Path, targets: list[Path]) -> list[dict]:
 
 def run(skill_dir: str | None = None, from_plugin: bool = False) -> dict:
     command = hrs_command()
-    report = {"hrs": command, "agents": [setup(command) for setup in AGENTS],
+    report = {"hrs": command, "agents": _each_agent(command),
               "browser": setup_browser(), "skills": []}
     if skill_dir:
         targets = [Path.home() / ".agents" / "skills"]

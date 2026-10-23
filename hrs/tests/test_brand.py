@@ -1,11 +1,12 @@
 """The product is JobShturman: no old visible names or addresses in what we ship (see docs/RENAME-PLAN.md)."""
+import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
-from hrshturman_core.brand import ALIASES, PRODUCT_NAME
-
 from hrs_cli import web
+from hrshturman_core.brand import ALIASES, PRODUCT_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = [".claude-plugin", "plugin", "hrs", "core", "local-app", "collector", "key-server", "docs", "README.md",
@@ -33,3 +34,10 @@ def test_the_page_and_the_skill_use_the_name():
     assert f"<title>{PRODUCT_NAME}</title>" in page and "{{PRODUCT}}" not in page
     skill = (ROOT / "plugin/skills/hrshturman/SKILL.md").read_text(encoding="utf-8").split("\n")[2]
     assert all(alias in skill for alias in ALIASES)
+
+
+def test_the_plugin_carries_the_version_of_hrs():
+    """Claude Code shows the plugin version; it stayed at 0.2.1 while hrs went to 0.9.x."""
+    hrs = tomllib.loads((ROOT / "hrs/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    plugin = json.loads((ROOT / "plugin/.claude-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
+    assert plugin == hrs

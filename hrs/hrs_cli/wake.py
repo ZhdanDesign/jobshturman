@@ -10,7 +10,7 @@ has expired, the person gets a notification to log in again instead of a silent 
 import os
 import shutil
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from hrshturman_core import schedule as core
@@ -33,9 +33,10 @@ EXTRA_PATH = ("~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "~/.npm-glo
               "~/AppData/Roaming/npm", "~/.cargo/bin")
 SERVER = "hrshturman"
 # What the agents print when their login is gone (Claude Code: "OAuth session expired", "Please run /login";
-# Codex: "Not logged in", "401 Unauthorized").
-LOGIN_SIGNS = ("oauth", "/login", "not logged in", "codex login", "invalid api key", "authentication_error",
-               "unauthorized", " 401")
+# Codex: "Not logged in", "401 Unauthorized"). Whole phrases: a 401 from hh.ru or the word «unauthorized» in
+# an agent's report about a site must not turn into «войдите в Claude».
+LOGIN_SIGNS = ("oauth session expired", "oauth token", "please run /login", "not logged in", "codex login",
+               "invalid api key", "authentication_error", "401 unauthorized")
 LOGIN = {
     "claude": "JobShturman не\u00a0смог начать работу: вход в\u00a0Claude истёк. Пожалуйста, войдите в\u00a0Claude: "
               "откройте Claude Code и\u00a0выполните команду /login. Дальше всё продолжится само.",
@@ -89,7 +90,7 @@ def _run(cmd, cwd, env):
 
 def run(settings: dict, now: datetime | None = None, runner=_run, notify=None) -> dict:
     """One wake-up. Returns what happened; never raises."""
-    local = (now or datetime.now(timezone.utc)).astimezone()
+    local = (now or datetime.now(UTC)).astimezone()
     if core.quiet(settings, local):
         return {"skipped": "quiet_hours"}
     found = find_agent()

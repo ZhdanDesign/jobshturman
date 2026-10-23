@@ -3,7 +3,7 @@ import hashlib
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 SCHEMA_VERSION = "0.1.0"
 
@@ -25,7 +25,7 @@ class DomainError(ValueError):
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def new_id(prefix):

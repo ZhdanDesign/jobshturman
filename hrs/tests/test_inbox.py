@@ -1,12 +1,11 @@
 """Answering employers in the person's own Telegram and mail: only fresh threads, only messages that need an action."""
-from test_web import home, run, tool  # noqa: F401 (fixture)
-from mcp import Client
-
 from hrs_cli import web
 from hrs_cli.server import build
+from mcp import Client
+from test_web import home, run, tool  # noqa: F401 (fixture)
 
 
-def test_rules_keep_old_threads_and_small_talk_out(home):
+def test_rules_keep_old_threads_and_small_talk_out(home):  # noqa: F811 - pytest fixture
     async def go():
         async with Client(build()) as c:
             first = await tool(c, "inbox_rules")
@@ -21,7 +20,7 @@ def test_rules_keep_old_threads_and_small_talk_out(home):
         assert words in rules, words
 
 
-def test_the_setting_lives_next_to_ui_mode(home):
+def test_the_setting_lives_next_to_ui_mode(home):  # noqa: F811 - pytest fixture
     async def go():
         async with Client(build()) as c:
             await tool(c, "ui_mode", mode="chat")
@@ -31,7 +30,7 @@ def test_the_setting_lives_next_to_ui_mode(home):
     assert web.get_mode() == "chat"
 
 
-def test_the_agent_is_told_before_it_touches_the_inbox(home):
+def test_the_agent_is_told_before_it_touches_the_inbox(home):  # noqa: F811 - pytest fixture
     server = build()
     assert "inbox_rules" in server.instructions
     async def go():

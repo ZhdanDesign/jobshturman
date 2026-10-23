@@ -3,8 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hrshturman_core import DomainError, Store
-from hrshturman_core import resume
+from hrshturman_core import DomainError, Store, resume
 from hrshturman_core.workspace import create_candidate
 from hrshturman_local import render
 

@@ -1,18 +1,17 @@
 """Regular work without the agent: schedule settings, reminders by rules, the daily digest."""
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from hrshturman_core import DomainError
 from hrshturman_core import applications as apps
 from hrshturman_core import intake, schedule
 from test_core import Base
 
 # 14:00 in Moscow: outside the default quiet hours 21:00–09:00.
-NOON = datetime(2026, 10, 20, 11, 0, tzinfo=timezone.utc)
+NOON = datetime(2026, 10, 20, 11, 0, tzinfo=UTC)
 
 
 def later(days=0, hours=0):
-    return datetime.now(timezone.utc) + timedelta(days=days, hours=hours)
+    return datetime.now(UTC) + timedelta(days=days, hours=hours)
 
 
 class ScheduleSettingsTests(Base):
@@ -72,7 +71,7 @@ class ReminderTests(Base):
         first = schedule.pick_notification(self.store, "cand-a", NOON)
         self.assertEqual(first["notify"]["rule"], "vacancies_unscored")
         self.assertEqual(schedule.pick_notification(self.store, "cand-a", NOON)["reason"], "nothing_new")
-        night = datetime(2026, 10, 20, 20, 0, tzinfo=timezone.utc)  # 23:00 in Moscow
+        night = datetime(2026, 10, 20, 20, 0, tzinfo=UTC)  # 23:00 in Moscow
         self.vacancy(2)
         self.assertEqual(schedule.pick_notification(self.store, "cand-a", night)["reason"], "quiet_hours")
         for n in (3, 4):

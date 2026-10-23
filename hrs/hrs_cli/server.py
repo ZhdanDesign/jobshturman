@@ -2,11 +2,10 @@
 from hrs_collector import mcp_server as collector_mcp
 from hrs_collector.service import Collector
 from hrshturman_core import DomainError, Store
+from hrshturman_core import schedule as schedule_core
 from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_local import mcp_server as local_mcp
 from mcp.server.mcpserver.exceptions import ToolError
-
-from hrshturman_core import schedule as schedule_core
 
 from . import docs, inbox, license, paths, schedule, selfupdate, web
 from .inproc import InProcessCollectorClient

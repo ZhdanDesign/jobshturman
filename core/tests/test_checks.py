@@ -1,5 +1,6 @@
 """Checks moved from the methodology prose into code: stage 15 constraints, texts for employers, stage 06 plan."""
 import unittest
+from typing import ClassVar
 
 from hrshturman_core import DomainError, checks, resume
 from test_core import Base
@@ -68,7 +69,7 @@ class VacancyConstraintsTests(unittest.TestCase):
 
 
 class ScreenTests(unittest.TestCase):
-    VACANCIES = [
+    VACANCIES: ClassVar[list] = [
         {"id": "a", "vacancy": vacancy(salary={"min": 100000, "max": 150000, "currency": "RUB"})},  # явно ниже
         {"id": "b", "vacancy": vacancy(salary=None)},                                               # зарплаты нет
         {"id": "c", "vacancy": vacancy(salary={"max": 330000, "currency": "RUB"})},                 # на 17% ниже

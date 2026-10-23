@@ -5,11 +5,10 @@ import json
 from urllib.parse import urlsplit
 
 import pytest
-from mcp import Client
-from test_license import issue, keys  # noqa: F401 (fixture)
-
 from hrs_cli import license, paths, web
 from hrs_cli.server import APP_MIME, APP_URI, build
+from mcp import Client
+from test_license import issue, keys  # noqa: F401 (fixture)
 
 
 @pytest.fixture
@@ -66,6 +65,26 @@ def test_one_time_link_cookie_and_host_check(home):
         assert stranger.request("GET", stranger.first)[0] == 401  # the token is spent
         assert b.request("GET", "/api/state", host=f"evil.test:{b.port}")[0] == 403
         assert b.request("POST", "/api/answer", body=None)[0] == 415
+    finally:
+        screen.stop()
+
+
+def test_links_and_sessions_expire_instead_of_piling_up(home, monkeypatch):
+    """`jbs serve` lives for days under an agent: every link it ever gave out and every session must not stay
+    valid, and the sets must not grow without end."""
+    screen = web.WebUI(*_store())
+    try:
+        clock = [1000.0]
+        monkeypatch.setattr(web.time, "monotonic", lambda: clock[0])
+        stale = Browser(screen.link())
+        clock[0] += web.LINK_TTL + 1
+        live = Browser(screen.link())
+        assert stale.request("GET", stale.first)[0] == 401  # the link was not opened in time
+        assert live.request("GET", live.first)[0] == 303 and len(screen.tokens) == 0
+        clock[0] += web.SESSION_TTL - 60
+        assert live.request("GET", "/api/state")[0] == 200  # still used: the session goes on
+        clock[0] += web.SESSION_TTL + 1
+        assert live.request("GET", "/api/state")[0] == 401 and screen.sessions == {}
     finally:
         screen.stop()
 

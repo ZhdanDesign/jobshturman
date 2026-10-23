@@ -26,7 +26,7 @@ claude plugin marketplace add <репозиторий или папка>
 claude plugin install hrshturman@hrshturman
 ```
 
-**Выпуск.** `uv run --no-project python hrs/build_dist.py` собирает `dist/hrshturman-<версия>-wheels.zip` с колёсами core, local-app, collector и hrs. Остальные зависимости ставятся из PyPI.
+**Выпуск.** `uv run --no-project python hrs/build_dist.py` собирает `dist/hrshturman-<версия>-wheels.zip` с колёсами core, local-app, collector и hrs. Остальные зависимости ставятся из PyPI. В архиве также папка `skill/` (навык). Архив подписывается ключом сервера ключей: `hrs-keys sign-release <архив>` на сервере (или `build_dist.py --sign KEY.pem`) кладёт рядом `.sig`. В выпуск на GitHub идут оба файла: `jobshturman-wheels.zip` и `jobshturman-wheels.zip.sig`; без подписи самообновление выпуск не ставит.
 
 ## Установка из исходников
 

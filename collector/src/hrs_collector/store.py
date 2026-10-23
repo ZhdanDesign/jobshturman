@@ -275,14 +275,14 @@ class Store:
         title_key = _title_key(item)
         search_text = " ".join(x for x in (item.title, item.company, item.location, item.text) if x).casefold()
         canonical, dup = self._dedup(db, candidate_id, vid, item.fingerprint, title_key)
-        values = dict(
-            vacancy_id=vid, candidate_id=candidate_id, source_id=source_id, item_key=item.item_key,
-            platform=item.platform, data_json=item.model_dump_json(), content_hash=item.content_hash,
-            snippet_hash=snippet_hash, completeness=item.completeness, fingerprint=item.fingerprint,
-            title_key=title_key, is_vacancy=item.is_vacancy, search_text=search_text,
-            published_at=iso(item.published_at), version=version, status="normalized",
-            first_seen_at=first_seen, last_seen_at=now, changed_at=now, canonical_id=canonical, duplicate_status=dup,
-        )
+        values = {
+            "vacancy_id": vid, "candidate_id": candidate_id, "source_id": source_id, "item_key": item.item_key,
+            "platform": item.platform, "data_json": item.model_dump_json(), "content_hash": item.content_hash,
+            "snippet_hash": snippet_hash, "completeness": item.completeness, "fingerprint": item.fingerprint,
+            "title_key": title_key, "is_vacancy": item.is_vacancy, "search_text": search_text,
+            "published_at": iso(item.published_at), "version": version, "status": "normalized",
+            "first_seen_at": first_seen, "last_seen_at": now, "changed_at": now, "canonical_id": canonical, "duplicate_status": dup,
+        }
         cols = ", ".join(values)
         if insert:
             db.execute(f"INSERT INTO vacancies ({cols}) VALUES ({', '.join('?' * len(values))})", tuple(values.values()))

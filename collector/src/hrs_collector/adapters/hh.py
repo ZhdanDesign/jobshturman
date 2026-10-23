@@ -12,13 +12,14 @@ from __future__ import annotations
 import html as htmllib
 import json
 import re
+from typing import ClassVar
 
 from ..errors import SourceError
 from ..models import Salary, SourceSpec, VacancyData
 from ..util import html_to_text, parse_dt
 from .base import Page, SourceAdapter, make_vacancy
 
-_STATE = re.compile(r'<template[^>]*id="HH-Lux-InitialState"[^>]*>(.*?)</template>', re.S)
+_STATE = re.compile(r'<template[^>]*id="HH-Lux-InitialState"[^>]*>(.*?)</template>', re.DOTALL)
 _PERIODS = {"MONTH": "month", "HOUR": "hour", "DAY": "day", "SHIFT": "shift", "FLY_IN_FLY_OUT": "fifo"}
 
 
@@ -50,7 +51,7 @@ class HHWebAdapter(SourceAdapter):
     platform = "hh"
     transport = "hh_web"
     version = "hh_web/0.1.0"
-    limits = [
+    limits: ClassVar[list[str]] = [
         "public search pages, no account: no applications, no chat",
         "search results carry no description; fetch_full reads the vacancy page",
         "hh.ru shows at most 2000 results per query",
@@ -150,7 +151,7 @@ class HHApiAdapter(SourceAdapter):
     platform = "hh"
     transport = "hh_api"
     version = "hh_api/0.1.0"
-    limits = ["needs an hh.ru access token (application or candidate OAuth)", "API returns at most 2000 results per query"]
+    limits: ClassVar[list[str]] = ["needs an hh.ru access token (application or candidate OAuth)", "API returns at most 2000 results per query"]
 
     def _headers(self) -> dict:
         creds = self.credentials.hh if self.credentials else None

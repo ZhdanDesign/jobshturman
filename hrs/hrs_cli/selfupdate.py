@@ -5,10 +5,13 @@ at most every CHECK_EVERY (the check runs in the background). On macOS and Linux
 start; on Windows it waits until the agent closes (see update_runner). The newest release on GitHub is
 compared with this hrs.
 
-How: the same way as the installer. The new and the current release wheels and the source of the new release
-are downloaded here, then update_runner.py, started with uv's own Python outside the hrs environment, waits
-until no hrs is running, runs `uv tool install --force`, checks the new hrs and lays the new skill out with
-`hrs setup`. If the new hrs does not start, the current one goes back. The data folder is never touched.
+How: the same way as the installer. The release archive (wheels and the skill) is downloaded with its
+Ed25519 signature and checked against the same public key as the methodology before anything is unpacked:
+GitHub is only a shelf, not a trusted source. Then update_runner.py, started with uv's own Python outside the
+hrs environment, waits until no hrs is running, runs `uv tool install --force`, checks the new hrs and lays the
+new skill out with `hrs setup`. If the new hrs does not start, the current one goes back from the copy kept
+since its own update, or from a signed download; without either the person is told to reinstall. The data
+folder is never touched.
 
 Off: HRS_AUTO_UPDATE=off, and always for hrs installed from a project folder (editable).
 """
@@ -17,18 +20,21 @@ import os
 import shutil
 import subprocess
 import sys
-import tarfile
 import threading
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
+from hrshturman_core import DomainError
 
 from . import license, paths, setup, update_runner
 
 REPO = "ZhdanDesign/jobshturman"
 ASSET = "jobshturman-wheels.zip"
+SIGNATURE = ASSET + ".sig"  # base64 Ed25519 over RELEASE_TAG + the archive, by the methodology signing key
+RELEASE_TAG = b"jobshturman-release\n"  # a signed methodology bundle can never pass as a release, nor the reverse
+SKILL_IN_ARCHIVE = "skill"  # folder with plugin/skills/hrshturman inside the archive (build_dist.py)
 CHECK_EVERY = timedelta(hours=3)
 RETRY_AFTER = timedelta(hours=24)  # a failed install of the same version is not retried every hour
 TIMEOUT = 60
@@ -92,7 +98,7 @@ def check(force: bool = False, http: httpx.Client | None = None) -> dict:
     """The newest release and whether it is newer than this hrs. Asks GitHub at most once in CHECK_EVERY."""
     state = _read(state_file())
     checked = state.get("checked_at")
-    fresh = checked and datetime.now(timezone.utc) - datetime.fromisoformat(checked) < CHECK_EVERY
+    fresh = checked and datetime.now(UTC) - datetime.fromisoformat(checked) < CHECK_EVERY
     if force or not fresh or not state.get("latest"):
         try:
             client = _http(http)
@@ -102,7 +108,7 @@ def check(force: bool = False, http: httpx.Client | None = None) -> dict:
             body = resp.json()
             state["latest"] = {"tag": body["tag_name"], "version": body["tag_name"].lstrip("v"),
                                "notes": (body.get("body") or "").strip()[:1500]}
-            state["checked_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            state["checked_at"] = datetime.now(UTC).isoformat(timespec="seconds")
             _write(state_file(), state)
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             return {"current": current(), "error": f"не удалось узнать новую версию: {exc}"}
@@ -137,6 +143,39 @@ def hrs_path(uv: str) -> str:
     return str(Path(out.stdout.strip()) / ("hrs.exe" if os.name == "nt" else "hrs"))
 
 
+def _signed_archive(client: httpx.Client, tag: str, dest: Path) -> Path:
+    """Download one release archive and its signature; unpack into dest only after the signature holds."""
+    base = f"https://github.com/{REPO}/releases/download/{tag}"
+    archive = _download(client, f"{base}/{ASSET}", dest.with_suffix(".zip"))
+    resp = client.get(f"{base}/{SIGNATURE}")
+    if resp.status_code == 404:
+        raise DomainError("unsigned_release", f"Выпуск {tag} не подписан: обновление не ставится без подписи")
+    resp.raise_for_status()
+    try:
+        license.verify(RELEASE_TAG + archive.read_bytes(), resp.text.strip())
+    except DomainError as exc:
+        raise DomainError("bad_signature", f"Подпись выпуска {tag} не сходится: обновление не ставится") from exc
+    with zipfile.ZipFile(archive) as z:
+        z.extractall(dest)
+    return dest
+
+
+def _old_wheels(client: httpx.Client, info: dict, work: Path) -> Path | None:
+    """Wheels of the current release for a rollback: the copy left by its own update, else a signed download.
+    None when there is neither (a release before signing, or one taken off GitHub): the update still goes in."""
+    kept = folder() / info["current"] / "wheels"
+    dest = work / "old-wheels"
+    if kept.is_dir() and any(kept.glob("*.whl")):
+        shutil.copytree(kept, dest)
+        return dest
+    try:
+        return _signed_archive(client, f"v{info['current']}", dest)
+    except (httpx.HTTPError, OSError, DomainError, zipfile.BadZipFile):
+        shutil.rmtree(dest, ignore_errors=True)
+        dest.with_suffix(".zip").unlink(missing_ok=True)
+        return None
+
+
 def prepare(info: dict, http: httpx.Client | None = None, uv: str | None = None) -> Path:
     """Download everything the install needs and write the job for update_runner. Returns the job file."""
     uv = uv or uv_path()
@@ -146,21 +185,15 @@ def prepare(info: dict, http: httpx.Client | None = None, uv: str | None = None)
     if work.exists():
         shutil.rmtree(work)
     client = _http(http)
-    base = f"https://github.com/{REPO}/releases/download"
-    for name, tag in (("wheels", info["tag"]), ("old-wheels", f"v{info['current']}")):
-        archive = _download(client, f"{base}/{tag}/{ASSET}", work / f"{name}.zip")
-        with zipfile.ZipFile(archive) as z:
-            z.extractall(work / name)
-    source = _download(client, f"https://github.com/{REPO}/archive/refs/tags/{info['tag']}.tar.gz", work / "source.tar.gz")
-    with tarfile.open(source) as t:
-        t.extractall(work / "source", filter="data")
-    skill = next((work / "source").glob("*/plugin/skills/hrshturman"), None)
-    if skill is None or not (skill / "SKILL.md").is_file():
-        raise RuntimeError("в выпуске нет навыка plugin/skills/hrshturman")
+    wheels = _signed_archive(client, info["tag"], work / "wheels")
+    skill = wheels / SKILL_IN_ARCHIVE
+    if not (skill / "SKILL.md").is_file():
+        raise RuntimeError("в выпуске нет навыка (папка skill в архиве)")
+    old = _old_wheels(client, info, work)
     runner = work / "update_runner.py"
     shutil.copy2(update_runner.__file__, runner)
     job = {"uv": uv, "hrs": hrs_path(uv), "from": info["current"], "to": info["latest"], "notes": info["notes"],
-           "wheels": str(work / "wheels"), "old_wheels": str(work / "old-wheels"), "skill_dir": str(skill),
+           "wheels": str(wheels), "old_wheels": str(old) if old else None, "skill_dir": str(skill),
            "from_plugin": not (setup.claude_home() / "skills" / setup.SKILL).is_dir(),
            "pids": str(pids_dir()), "result": str(result_file()), "parent": os.getpid(), "runner": str(runner)}
     _write(work / "job.json", job)
@@ -196,14 +229,14 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
         return info
     last = _read(result_file())
     if not force and not last.get("ok") and last.get("to") == info["latest"] and last.get("at") \
-            and datetime.now(timezone.utc) - datetime.fromisoformat(last["at"]) < RETRY_AFTER:
+            and datetime.now(UTC) - datetime.fromisoformat(last["at"]) < RETRY_AFTER:
         return info | {"skipped": "failed_recently", "last_error": last.get("error")}
     busy = update_runner.running(pids_dir(), exclude=os.getpid())
     if busy and not update_runner.IN_PLACE:
         return info | {"pending": "JobShturman открыт у агента: обновлю, когда агент закроется"}
     try:
         job = prepare(info, http=http)
-    except (httpx.HTTPError, OSError, RuntimeError, zipfile.BadZipFile, tarfile.TarError) as exc:
+    except (httpx.HTTPError, OSError, RuntimeError, zipfile.BadZipFile, DomainError) as exc:
         return info | {"error": f"не удалось скачать обновление: {exc}"}
     spawn(job)
     return info | {"started": True}
@@ -214,6 +247,7 @@ def start(force: bool = False, http: httpx.Client | None = None, spawn=_spawn) -
 _started = None  # the version this `hrs serve` runs; an update installed under it works from the next start
 PACKAGES = ("hrs_cli", "hrshturman_core", "hrshturman_local", "hrs_collector")
 _held = []
+_releases = []  # what hold() registered to run when this process ends
 
 
 def preload() -> None:
@@ -242,6 +276,8 @@ def hold() -> None:
 
     def release():
         # The download takes a while and the agent may not wait for it: a separate `hrs self-update` does it.
+        if release in _releases:
+            _releases.remove(release)
         held.close()
         Path(held.name).unlink(missing_ok=True)
         info = _read(state_file()).get("latest") or {}
@@ -250,7 +286,14 @@ def hold() -> None:
             _quiet(lambda: _detach([sys.executable, "-m", "hrs_cli", "self-update"], folder()))
 
     import atexit
+    _releases.append(release)
     atexit.register(release)
+
+
+def release_all() -> None:
+    """What atexit would run: for an exit that skips atexit (os._exit when the agent is gone, main.exit_with_parent)."""
+    while _releases:
+        _quiet(_releases.pop(0))
 
 
 def _quiet(fn):

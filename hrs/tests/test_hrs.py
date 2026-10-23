@@ -63,8 +63,7 @@ def test_serve_over_stdio_imports_a_document(tmp_path):
     cv = resume_docx(tmp_path / "cv.docx")
 
     async def go():
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as s:
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
                 await s.initialize()
                 tools = {t.name for t in (await s.list_tools()).tools}
                 imported = await s.call_tool("document_import", {"path": str(cv)})

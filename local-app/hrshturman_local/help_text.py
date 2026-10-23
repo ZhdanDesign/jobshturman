@@ -18,7 +18,7 @@ def lookup(topic=None):
     intro, by_title = sections()
     if not topic or not topic.strip():
         return {"intro": intro, "topics": list(by_title)}
-    norm = lambda v: v.casefold().replace("ё", "е")  # noqa: E731
+    norm = lambda v: v.casefold().replace("ё", "е")
     words = [w for w in norm(topic).split() if len(w) > 2] or [norm(topic)]
     score = {t: 3 * sum(w in norm(t) for w in words) + sum(w in norm(body) for w in words)
              for t, body in by_title.items()}

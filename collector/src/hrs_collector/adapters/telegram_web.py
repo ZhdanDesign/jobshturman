@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from typing import ClassVar
 
 from bs4 import BeautifulSoup, Tag
 
@@ -20,12 +21,12 @@ from ..util import html_to_text, parse_dt
 from .base import Page, SourceAdapter, make_vacancy
 
 _LABELS = {
-    "location": re.compile(r"^(локация|location|город|место работы|география)\s*[:：-]\s*(.+)$", re.I),
-    "company": re.compile(r"^(компания|company|работодатель|employer)\s*[:：-]\s*(.+)$", re.I),
-    "employment": re.compile(r"^(занятость|employment|формат работы|формат)\s*[:：-]\s*(.+)$", re.I),
+    "location": re.compile(r"^(локация|location|город|место работы|география)\s*[:：-]\s*(.+)$", re.IGNORECASE),
+    "company": re.compile(r"^(компания|company|работодатель|employer)\s*[:：-]\s*(.+)$", re.IGNORECASE),
+    "employment": re.compile(r"^(занятость|employment|формат работы|формат)\s*[:：-]\s*(.+)$", re.IGNORECASE),
 }
 _TITLE_PATTERNS = [
-    re.compile(r"^(?:#?вакансия|vacancy|позиция|position|должность)\s*[:：-]?\s*(.+)$", re.I),
+    re.compile(r"^(?:#?вакансия|vacancy|позиция|position|должность)\s*[:：-]?\s*(.+)$", re.IGNORECASE),
 ]
 
 
@@ -65,7 +66,7 @@ class TelegramWebAdapter(SourceAdapter):
     platform = "telegram"
     transport = "telegram_web"
     version = "telegram_web/0.1.0"
-    limits = [
+    limits: ClassVar[list[str]] = [
         "public channels with web preview only",
         "no private channels, groups without preview or personal chats",
         "edits are detected only while the post is inside the re-check window",
@@ -170,5 +171,5 @@ def _chat_id(data_view: str) -> str | None:
         padded = data_view + "=" * (-len(data_view) % 4)
         value = json.loads(base64.b64decode(padded))["c"]
         return str(abs(int(value)))
-    except Exception:
+    except Exception:  # noqa: BLE001 - any malformed token means no cursor
         return None

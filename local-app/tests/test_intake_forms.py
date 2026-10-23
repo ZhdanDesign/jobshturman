@@ -42,8 +42,8 @@ class IntakeFormTests(unittest.TestCase):
 
     def run_session(self, scenario, elicitation_callback=None):
         async def go():
-            async with stdio_client(self.params) as (read, write):
-                async with ClientSession(read, write, elicitation_callback=elicitation_callback) as session:
+            async with (stdio_client(self.params) as (read, write),
+                        ClientSession(read, write, elicitation_callback=elicitation_callback) as session):
                     await session.initialize()
                     return await scenario(session)
         return asyncio.run(go())
@@ -110,8 +110,8 @@ class IntakeFormTests(unittest.TestCase):
             raise AssertionError("2026-07-28 has no mid-call elicitation")
 
         async def go():
-            async with stdio_client(self.params) as (read, write):
-                async with ClientSession(read, write, elicitation_callback=never_called) as s:
+            async with (stdio_client(self.params) as (read, write),
+                        ClientSession(read, write, elicitation_callback=never_called) as s):
                     await s.discover()
                     self.assertGreaterEqual(s.protocol_version, "2026-07-28")
                     first = await s.call_tool("intake_ask", {"block": "pains"}, allow_input_required=True)

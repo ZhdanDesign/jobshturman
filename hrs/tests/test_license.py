@@ -10,15 +10,14 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from hrs_cli import keystore, license, main
+from hrs_cli.server import build
 from hrs_keys import bundle
 from hrs_keys import cli as keys_cli
 from hrs_keys.app import create_app
 from hrs_keys.service import Settings, generate_signing_key, iso, now
 from hrshturman_core import DomainError
 from mcp import Client, MCPError
-
-from hrs_cli import license, main
-from hrs_cli.server import build
 
 ADMIN = {"Authorization": "Bearer admin"}
 STAGE_00 = ("---\nname: stage-00\ndescription: этап 0\n---\n# Диагностика\n\nСначала выясни, что болит у кандидата сейчас.\n\n"
@@ -361,3 +360,37 @@ def test_the_whole_methodology_is_refused_with_the_licence_link(keys, capsys):
     assert "запрещено лицензионным" in capsys.readouterr().out
     text = license.BundleLibrary().read("skills/stage-00-diagnostic/references/procedure.md")
     assert text.endswith(license.license_note()) and "использование вне JobShturman запрещены" in text
+
+
+def test_reading_stages_does_not_hit_the_key_store_and_decrypt_the_bundle_every_time(keys, monkeypatch):
+    """On macOS every key store read is a `security` process; a stage read used to cost three of them plus a
+    full decrypt and signature check, and the route lookup inside the stage gate repeated all of it."""
+    license.login(issue(keys)["key"], http=keys)
+    loads, decrypts = [], []
+    store = keystore.store()
+    monkeypatch.setattr(keystore, "store", lambda: store)
+    monkeypatch.setattr(store, "load", lambda account, _load=store.load: loads.append(account) or _load(account))
+    monkeypatch.setattr(license, "decrypt", lambda blob, state, _d=license.decrypt: decrypts.append(1) or _d(blob, state))
+    lib = license.BundleLibrary(reached=lambda: 6)
+    texts = []
+    for _ in range(3):
+        texts.append(lib.read("skills/stage-07-master-cv/references/procedure.md"))
+        assert lib.names() and lib.read("agent/genesis.md")
+    assert len(decrypts) == 1 and len(loads) <= 4  # the first read checks the key; the next ones cost nothing
+    assert all("Мастер-резюме" in plain(t) for t in texts)
+
+    path = license.bundle_file()  # a changed file on disk is read again, and refused when tampered
+    path.write_bytes(path.read_bytes() + b"x")
+    with pytest.raises(DomainError) as exc:
+        lib.names()
+    assert exc.value.code == "bad_bundle"
+
+
+def test_a_proxy_error_page_from_the_key_server_is_a_plain_error(keys):
+    import httpx
+    html = httpx.Response(502, text="<html>502 Bad Gateway</html>")
+    assert license._error(html).code == "server_error" and "502" in str(license._error(html))
+    odd = httpx.Response(500, json=["not", "an", "object"])
+    assert license._error(odd).code == "server_error"
+    proper = httpx.Response(403, json={"error": "key_expired", "message": "Срок ключа закончился"})
+    assert license._error(proper).code == "key_expired"

@@ -7,19 +7,25 @@ import argparse
 import functools
 import inspect
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from mcp.server.mcpserver import Context, Elicit, ElicitationResult, MCPServer, Resolve
-from mcp.server.mcpserver.exceptions import ResourceError, ToolError
-from pydantic import BaseModel, Field, create_model
-
-from hrshturman_core import DomainError, Store
+from hrshturman_core import (
+    DomainError,
+    Store,
+    checks,
+    intake,
+    methodology,
+    report,
+    resume,
+)
 from hrshturman_core import applications as apps
-from hrshturman_core import checks, intake, methodology, report, resume
 from hrshturman_core import schedule as schedule_core
 from hrshturman_core.brand import PRODUCT_NAME
 from hrshturman_core.workspace import create_candidate
+from mcp.server.mcpserver import Context, Elicit, ElicitationResult, MCPServer, Resolve
+from mcp.server.mcpserver.exceptions import ResourceError, ToolError
+from pydantic import BaseModel, Field, create_model
 
 from . import collector_feed, config, help_text, render
 
@@ -410,7 +416,7 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
     def application_record_sent(application_id: str, expected_version: int, proof_ref: str,
                                 observed_at: str | None = None) -> dict:
         """Кандидат откликнулся сам, без агента. proof_ref — ссылка, номер отклика или имя скриншота. Отметка хранится как «со слов кандидата»."""
-        evidence = {"observed_at": observed_at or datetime.now(timezone.utc).isoformat(), "proof_ref": proof_ref}
+        evidence = {"observed_at": observed_at or datetime.now(UTC).isoformat(), "proof_ref": proof_ref}
         return apps.record_sent_by_candidate(store, cid, application_id, expected_version, evidence,
                                              actor="candidate_via_agent")
 
@@ -426,14 +432,14 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
             raise DomainError("rate_limited", f"За сутки уже {len(started)} откликов через браузер, лимит {limit}. "
                               "Продолжай завтра.")
         if started:
-            wait = MIN_PAUSE_SECONDS - (datetime.now(timezone.utc) - started[-1]).total_seconds()
+            wait = MIN_PAUSE_SECONDS - (datetime.now(UTC) - started[-1]).total_seconds()
             if wait > 0:
                 raise DomainError("rate_limited", f"Пауза между откликами: подожди ещё {int(wait) + 1} с (retry_after).")
         return apps.reserve(store, cid, application_id, expected_version, BROWSER_WORKER, actor="agent")
 
     def browser_attempts():
         """Start times of browser applications in the last 24 hours, oldest first."""
-        since = datetime.now(timezone.utc) - timedelta(days=1)
+        since = datetime.now(UTC) - timedelta(days=1)
         stamps = [datetime.fromisoformat(a["attempt"]["started_at"]) for a in apps.list_applications(store, cid)
                   if (a.get("attempt") or {}).get("worker") == BROWSER_WORKER]
         return sorted(t for t in stamps if t > since)
@@ -485,7 +491,7 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
         """Итог отправки через браузер. sent=true: platform_id — номер отклика или ссылка на переписку на площадке.
         sent=false: check_reference — где проверил, что отклика нет (страница откликов, сообщение площадки).
         proof_ref — что видел: текст подтверждения или имя скриншота."""
-        evidence = {"observed_at": observed_at or datetime.now(timezone.utc).isoformat(), "proof_ref": proof_ref,
+        evidence = {"observed_at": observed_at or datetime.now(UTC).isoformat(), "proof_ref": proof_ref,
                     "platform_id": platform_id, "check_reference": check_reference}
         return apps.reconcile(store, cid, application_id, expected_version, "sent" if sent else "not_sent",
                               {k: v for k, v in evidence.items() if v is not None}, actor="agent")

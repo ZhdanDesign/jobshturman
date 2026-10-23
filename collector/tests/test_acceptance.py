@@ -6,7 +6,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-
 from conftest import T0, FakeChannel
 from hrs_collector.errors import SourceError
 from hrs_collector.models import CollectParams, RunRequest, SourceIn, SourceSpec

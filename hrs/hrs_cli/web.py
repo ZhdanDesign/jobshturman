@@ -10,6 +10,7 @@ The page shows only questions and progress, never the methodology text.
 import json
 import secrets
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -26,6 +27,8 @@ from . import paths
 STATIC = Path(__file__).with_name("static")
 MODES = ("chat", "builtin_browser", "external_browser")
 COOKIE = "hrs_session"
+LINK_TTL = 15 * 60  # a one-time link not opened within this is dead
+SESSION_TTL = 12 * 3600  # an idle session; `jbs serve` lives for days under an agent and must not collect them
 
 def page() -> str:
     """app.html with the design tokens inlined, so one file works as a web page and as an MCP App."""
@@ -133,8 +136,8 @@ class WebUI:
 
     def __init__(self, store, cid, library=None):
         self.store, self.cid, self.library = store, cid, library
-        self.tokens: set[str] = set()
-        self.sessions: set[str] = set()
+        self.tokens: dict[str, float] = {}  # token -> issued at
+        self.sessions: dict[str, float] = {}  # session -> last seen
         self.server: ThreadingHTTPServer | None = None
         self.lock = threading.Lock()
 
@@ -154,9 +157,22 @@ class WebUI:
         if view not in ("intake", "progress"):
             raise DomainError("invalid_schema", "view: intake or progress")
         self.start()
+        self.expire()
         token = secrets.token_urlsafe(24)
-        self.tokens.add(token)
+        self.tokens[token] = time.monotonic()
         return f"http://127.0.0.1:{self.port}/?t={token}#{view}"
+
+    def expire(self, now: float | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        self.tokens = {t: at for t, at in self.tokens.items() if now - at < LINK_TTL}
+        self.sessions = {s: at for s, at in self.sessions.items() if now - at < SESSION_TTL}
+
+    def session_ok(self, session: str) -> bool:
+        self.expire()
+        if session not in self.sessions:
+            return False
+        self.sessions[session] = time.monotonic()
+        return True
 
     def stop(self):
         if self.server is not None:
@@ -199,7 +215,7 @@ def make_handler(ui: WebUI):
 
         def _session_ok(self):
             cookie = SimpleCookie(self.headers.get("Cookie") or "")
-            if COOKIE in cookie and cookie[COOKIE].value in ui.sessions:
+            if COOKIE in cookie and ui.session_ok(cookie[COOKIE].value):
                 return True
             self._error(HTTPStatus.UNAUTHORIZED, "unauthorized", "Откройте свежую ссылку от агента")
             return False
@@ -218,10 +234,11 @@ def make_handler(ui: WebUI):
             url = urlsplit(self.path)
             if url.path == "/":
                 token = (parse_qs(url.query).get("t") or [""])[0]
+                ui.expire()
                 if token and token in ui.tokens:
-                    ui.tokens.discard(token)
+                    del ui.tokens[token]
                     session = secrets.token_urlsafe(24)
-                    ui.sessions.add(session)
+                    ui.sessions[session] = time.monotonic()
                     return self._send(HTTPStatus.SEE_OTHER, b"", "text/plain", [
                         ("Location", "/app"),
                         ("Set-Cookie", f"{COOKIE}={session}; HttpOnly; SameSite=Strict; Path=/")])

@@ -206,3 +206,15 @@ def test_import_the_published_version_and_export_the_draft(server):
     with zipfile.ZipFile(io.BytesIO(server.get(M + "/export", headers=AUTHOR).content)) as z:
         assert {"library_manifest.json", "agent/genesis.md", "skills/stage-00-intake-diagnostic/SKILL.md"} == \
             set(z.namelist())
+
+
+def test_an_oversized_upload_is_refused_before_it_is_read_whole(server, monkeypatch):
+    from hrs_keys import app as app_module
+    monkeypatch.setattr(app_module, "MAX_UPLOAD", 1000)
+    big = b"x" * 1001
+    r = server.post(M + "/upload", files={"file": ("notes.md", big, "text/markdown")}, headers=AUTHOR)
+    assert r.status_code == 413 and r.json()["error"] == "too_large"
+    r = server.post("/v1/admin/bundles", files={"file": ("b.zip", big)}, data={"note": "n"}, headers=ADMIN)
+    assert r.status_code == 413
+    r = server.post(M + "/upload", files={"file": ("notes.md", b"x" * 1000, "text/markdown")}, headers=AUTHOR)
+    assert r.status_code == 200

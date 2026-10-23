@@ -11,12 +11,11 @@ from pathlib import Path
 from docx import Document
 from docx.shared import Pt
 from fpdf import FPDF
-from pypdf import PdfReader
-
 from hrshturman_core import DomainError
 from hrshturman_core import resume as resume_mod
 from hrshturman_core.common import digest
 from hrshturman_core.render_layout import blocks, extraction_check
+from pypdf import PdfReader
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 FONTS = {"": FONT_DIR / "NotoSans-Regular.ttf", "B": FONT_DIR / "NotoSans-Bold.ttf"}

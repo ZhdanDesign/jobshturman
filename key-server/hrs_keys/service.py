@@ -28,8 +28,12 @@ KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I
 CHANNELS = ("stable", "test")
 CONSENT_HRS = "0.4.0"
 NOTE_MAX = 1000
-HRS_UPDATE = ("Вышла новая версия методики, но её читает только новый JobShturman. Обновите программу: "
-              "curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh")
+HRS_UPDATE = ("Вышла новая версия методики, но её читает только новый JobShturman. Обновите программу. "
+              "macOS и Linux: curl -fsSL https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.sh | sh; "
+              "Windows (PowerShell): irm https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.ps1 | iex")
+
+
+RELEASE_TAG = b"jobshturman-release\n"  # the same prefix as hrs_cli.selfupdate.RELEASE_TAG
 
 
 def version_tuple(v: str | None) -> tuple:
@@ -496,6 +500,11 @@ class KeyServer:
 
     def public_key(self) -> str:
         return public_key_b64(self._signer())
+
+    def sign_release(self, archive: bytes) -> str:
+        """Signature for a release archive (jobshturman-wheels.zip): hrs checks it before a self-update.
+        The prefix keeps a release and a methodology bundle from standing in for each other."""
+        return base64.b64encode(self._signer().sign(RELEASE_TAG + archive)).decode()
 
     @staticmethod
     def _note(note: str | None) -> str:

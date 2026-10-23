@@ -3,4 +3,4 @@ the hrs command, the hrshturman MCP server, packages, paths, environment variabl
 PRODUCT_NAME = "JobShturman"
 
 # Names a person may use when calling the agent; the bootstrap skill lists them as triggers.
-ALIASES = ("JobShturman", "Job Штурман", "JobШтурман", "Джоб Штурман", "JobShturman", "JobShturman")
+ALIASES = ("JobShturman", "Job Штурман", "JobШтурман", "Джоб Штурман")

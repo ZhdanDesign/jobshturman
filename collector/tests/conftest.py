@@ -7,11 +7,11 @@ import base64
 import html
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 import httpx
 import pytest
-
 from hrs_collector.adapters import Page, SourceAdapter
 from hrs_collector.adapters.base import make_vacancy
 from hrs_collector.errors import SourceError
@@ -20,7 +20,7 @@ from hrs_collector.models import SourceSpec
 from hrs_collector.service import Collector
 from hrs_collector.store import Store
 
-T0 = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 
 
 def tg_message(username: str, chat_c: int, msg_id: int, when: datetime, text_html: str, edited: bool = False) -> str:
@@ -82,7 +82,7 @@ class FakeAdapter(SourceAdapter):
     platform = "telegram"
     transport = "telegram_web"
     version = "fake/1"
-    channels: dict[str, FakeChannel] = {}
+    channels: ClassVar[dict[str, FakeChannel]] = {}
 
     def read_page(self, spec: SourceSpec, token: str | None, since=None) -> Page:
         ch = self.channels[spec.config["username"]]

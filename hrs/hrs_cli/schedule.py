@@ -20,7 +20,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from hrshturman_core import Store
@@ -92,16 +92,25 @@ def plan(settings_dict, platform=None, only=None):
                           "run": [["launchctl", "bootout", _gui(label)], ["launchctl", "bootstrap", _gui(), str(path)]]})
         elif platform == "win32":
             run = [["schtasks", "/Delete", "/F", "/TN", f"{PRODUCT_NAME}\\{task}-{n}"] for n in range(6)]
+            # Task Scheduler takes no environment and /TR is limited to 261 characters: the task runs a small
+            # .cmd next to the logs that sets HRSHTURMAN_* and HRS_* as launchd and systemd get them.
+            script = logs / f"{task}.cmd"
+            body = ("@echo off\r\n" + "".join(f'set "{k}={v}"\r\n' for k, v in _env().items())
+                    + f'{subprocess.list2cmdline(_command(task))} >> "{logs / f"{task}.log"}" 2>&1\r\n')
+            line = f'"{script}"'
             if entry["enabled"] and hourly:
-                line = subprocess.list2cmdline(_command(task))
                 run += [["schtasks", "/Create", "/F", "/SC", "HOURLY", "/MO", "1", "/TN", f"{PRODUCT_NAME}\\{task}-0",
                          "/TR", line],
                         ["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", f"{PRODUCT_NAME}\\{task}-1", "/TR", line]]
             elif entry["enabled"]:
-                line = subprocess.list2cmdline(_command(task))
                 run += [["schtasks", "/Create", "/F", "/SC", "DAILY", "/ST", f"{h:02d}:{m:02d}",
                          "/TN", f"{PRODUCT_NAME}\\{task}-{n}", "/TR", line] for n, (h, m) in enumerate(_times(entry))]
-            steps.append({"task": task, "run": run})
+            step = {"task": task, "run": run}
+            if entry["enabled"]:
+                step["write"] = {str(script): body}
+            else:
+                step["remove"] = str(script)
+            steps.append(step)
         else:
             unit = f"jobshturman-{task}"
             service, timer = systemd_dir() / f"{unit}.service", systemd_dir() / f"{unit}.timer"
@@ -109,7 +118,7 @@ def plan(settings_dict, platform=None, only=None):
                 steps.append({"task": task, "remove": [str(service), str(timer)],
                               "run": [["systemctl", "--user", "disable", "--now", f"{unit}.timer"]]})
                 continue
-            env = "".join(f"Environment={k}={v}\n" for k, v in _env().items())
+            env = "".join(f'Environment="{k}={v}"\n' for k, v in _env().items())  # quoted: paths with spaces
             calendars = (f"OnBootSec=5min\nOnUnitActiveSec={entry.get('every_minutes', 60)}min\n" if hourly else
                          "".join(f"OnCalendar=*-*-* {h:02d}:{m:02d}:00\n" for h, m in _times(entry)))
             steps.append({"task": task, "write": {
@@ -132,7 +141,7 @@ def _apply(steps, runner):
     for step in steps:
         for path, body in (step.get("write") or {}).items():
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_text(body, encoding="utf-8")
+            Path(path).write_text(body, encoding="utf-8", newline="")
         removed = step.get("remove")
         for path in [removed] if isinstance(removed, str) else removed or []:
             Path(path).unlink(missing_ok=True)
@@ -153,11 +162,12 @@ def install(dry_run=False, platform=None, runner=_run):
 
 def _present(step, platform, runner):
     """Whether the system scheduler already holds this step as planned."""
+    files = step.get("write") or {}
+    written = all(Path(path).is_file() and Path(path).read_bytes() == body.encode("utf-8") for path, body in files.items())
     if platform == "win32":
         names = [cmd[cmd.index("/TN") + 1] for cmd in step["run"] if cmd[1] == "/Create"]
-        return all(runner(["schtasks", "/Query", "/TN", name]) == 0 for name in names)
-    files = step.get("write") or {}
-    return all(Path(path).is_file() and Path(path).read_text(encoding="utf-8") == body for path, body in files.items())
+        return written and all(runner(["schtasks", "/Query", "/TN", name]) == 0 for name in names)
+    return written
 
 
 def ensure(platform=None, runner=_run, skip=()):
@@ -229,10 +239,10 @@ def notify(title, text):
         print(f"[{title}] {text}", flush=True)
         return True
     if sys.platform == "darwin":
-        quote = lambda v: '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'  # noqa: E731
+        quote = lambda v: '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
         return _run(["osascript", "-e", f"display notification {quote(text)} with title {quote(title)}"]) == 0
     if sys.platform == "win32":
-        esc = lambda v: v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "''")  # noqa: E731
+        esc = lambda v: v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "''")
         script = (
             "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime]"
             " | Out-Null; $x = [Windows.Data.Xml.Dom.XmlDocument]::new(); $x.LoadXml('<toast><visual>"
@@ -273,7 +283,7 @@ def run(task, collector=None, now=None):
         lock.close()
         Path(lock.name).unlink(missing_ok=True)
     core.record_run(store, s.candidate_id, task, result)
-    return {"task": task, "at": (now or datetime.now(timezone.utc)).isoformat(), **result}
+    return {"task": task, "at": (now or datetime.now(UTC)).isoformat(), **result}
 
 
 def _lock(task):
@@ -310,14 +320,14 @@ def _due(entry, last, local_now):
     if not passed:
         return None
     slot = max(passed)
-    if last and datetime.fromisoformat(last.replace("Z", "+00:00")) >= slot:
+    if last and datetime.fromisoformat(last) >= slot:
         return None
     return slot
 
 
 def catch_up(settings, now=None, runner=None):
     """Run today's tasks whose time passed while the computer slept or was off."""
-    local_now = (now or datetime.now(timezone.utc)).astimezone()
+    local_now = (now or datetime.now(UTC)).astimezone()
     done = []
     for task, entry in settings["tasks"].items():
         if not entry["enabled"] or task in core.NO_CATCH_UP:

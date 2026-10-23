@@ -12,6 +12,7 @@ credentials file (see credentials.py). The session string is never logged.
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 
 from ..errors import SourceError
 from ..models import SourceSpec, VacancyData
@@ -25,7 +26,7 @@ class TelegramMTProtoAdapter(SourceAdapter):
     platform = "telegram"
     transport = "telegram_mtproto"
     version = "telegram_mtproto/0.1.0"
-    limits = [
+    limits: ClassVar[list[str]] = [
         "reads only what the candidate's own account can see",
         "does not join channels or accept invites",
         "Telegram FLOOD_WAIT pauses the source with rate_limited",

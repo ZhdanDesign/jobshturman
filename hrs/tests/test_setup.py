@@ -9,7 +9,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
 from hrs_cli import setup
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -291,3 +290,16 @@ def test_the_data_folder_tells_any_agent_how_to_work(home):
     claude.write_text("Мои правила\n", encoding="utf-8")
     assert {f["status"] for f in setup.run()["workspace_rules"]} == {"already", "kept"}
     assert claude.read_text(encoding="utf-8") == "Мои правила\n"
+
+
+def test_one_broken_agent_config_does_not_stop_the_others(home):
+    (home / ".codex").mkdir()
+    (home / ".codex" / "config.toml").write_text("model = \n[broken", encoding="utf-8")  # not TOML
+    (home / ".grok").mkdir()
+
+    report = setup.run()
+
+    by_agent = {a["agent"]: a for a in report["agents"]}
+    assert by_agent["codex"]["status"] == "error" and "TOMLDecodeError" in by_agent["codex"]["message"]
+    assert by_agent["grok"]["status"] == "added"  # the next agent still got its server
+    assert {a["agent"] for a in report["agents"]} == {"claude", "codex", "grok", "hermes", "openclaw"}
