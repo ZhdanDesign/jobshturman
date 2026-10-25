@@ -237,3 +237,13 @@ if (latestVersion) {
     })
     .catch(() => {});
 }
+
+// На телефоне тап по окну агента подсказывает, что это только пример.
+document.querySelectorAll(".app").forEach((app) => {
+  let timer;
+  app.addEventListener("click", () => {
+    app.classList.add("is-noted");
+    clearTimeout(timer);
+    timer = setTimeout(() => app.classList.remove("is-noted"), 4000);
+  });
+});
