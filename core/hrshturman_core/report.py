@@ -2,6 +2,8 @@
 
 Counts are by unique application. Every metric lists its IDs so a number can
 always be opened. draft and send_unknown are never counted as sent.
+With max_ids (the agent's answer) every list is cut to its first max_ids IDs and the per-vacancy next steps
+are grouped by action: a base of 1 500 vacancies must not fill the model's context.
 """
 from .common import DomainError
 from .workspace import get_candidate
@@ -22,7 +24,7 @@ NEXT_STEP = {
 }
 
 
-def status(store, candidate_id):
+def status(store, candidate_id, max_ids=None):
     with store.read() as tx:
         cand = get_candidate(tx, candidate_id)
         intake = tx.find("intake", candidate_id, "active")
@@ -55,6 +57,7 @@ def status(store, candidate_id):
         "employer_rejected": with_funnel("employer_rejected"),
     }
 
+    counts = {k: len(v) for k, v in funnel.items()}
     next_steps = []
     if intake is None or intake["status"] != "confirmed":
         next_steps.append({"owner": "candidate", "action": "Заполнить и подтвердить анкету-диагностику", "ref": None})
@@ -62,11 +65,22 @@ def status(store, candidate_id):
         next_steps.append({"owner": "ai", "action": "Собрать факты о кандидате из материалов и интервью", "ref": None})
     if not any(r["status"] == "approved" for r in resumes):
         next_steps.append({"owner": "candidate", "action": "Заполнить и утвердить мастер-резюме", "ref": None})
+    per_app = []
     for app in apps:
         step = NEXT_STEP.get(app["state"])
         if step:
-            next_steps.append({"owner": step[0], "action": step[1], "ref": app["object_id"],
-                               "title": app["vacancy"]["title"]})
+            per_app.append({"owner": step[0], "action": step[1], "ref": app["object_id"],
+                            "title": app["vacancy"]["title"], "state": app["state"]})
+    if max_ids is None:
+        next_steps += [{k: v for k, v in s.items() if k != "state"} for s in per_app]
+    else:
+        groups = {}
+        for s in per_app:
+            groups.setdefault(s["state"], []).append(s)
+        for state, items in groups.items():
+            next_steps.append({"owner": items[0]["owner"], "action": items[0]["action"], "state": state,
+                               "count": len(items), "refs": [s["ref"] for s in items[:max_ids]]})
+        funnel = {k: v[:max_ids] for k, v in funnel.items()}
 
     return {
         "candidate_id": candidate_id,
@@ -74,7 +88,7 @@ def status(store, candidate_id):
         "intake": intake and intake["status"],
         "resume": [{"track_id": r["content"]["track_id"], "status": r["status"]} for r in resumes],
         "facts": {"total": len(facts), "confirmed": sum(f["status"] == "confirmed" for f in facts)},
-        "funnel": {"counts": {k: len(v) for k, v in funnel.items()}, "ids": funnel},
+        "funnel": {"counts": counts, "ids": funnel},
         "next_steps": next_steps,
         "coverage": coverage and coverage["report"],
         "limitations": ([MANUAL_SEND_NOTE] if any(a["evidence"]["level"] == "self_reported" for a in sent) else [])

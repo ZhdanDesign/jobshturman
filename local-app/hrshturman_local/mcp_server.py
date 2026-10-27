@@ -32,6 +32,23 @@ from . import collector_feed, config, help_text, render
 
 BROWSER_WORKER = "agent-browser"
 DAILY_SEND_LIMIT = 40
+# Every answer stays in the agent's context and is read again on each later turn: lists come in pages, a base of
+# 1 500 vacancies is never sent whole (a full applications_list was about 650 000 tokens).
+PAGE = 50
+RANKED = 30
+BATCH = 20
+STATUS_IDS = 20
+SNIPPET = 300
+
+
+def _brief(app):
+    """A card for lists: everything but the vacancy text (application_get gives it)."""
+    return app | {"vacancy": {k: v for k, v in app["vacancy"].items() if k != "text"}}
+
+
+def _short(app):
+    """What a write returns: enough for the next call, without the vacancy that the agent already has."""
+    return {k: app.get(k) for k in ("object_id", "version", "state", "score", "decision")}
 # Between two browser applications, so the platform does not see a robot. HRS_SEND_PAUSE only for tests.
 MIN_PAUSE_SECONDS = int(os.environ.get("HRS_SEND_PAUSE", "60"))
 
@@ -68,8 +85,12 @@ GUIDE = """Как работать с инструментами JobShturman.
   Если формы не было (asked_by="agent"), задай вопросы сам и передай ответ как есть в intake_answer.
   Потом покажи карту запроса и подтверждай intake_confirm только после явного «да».
 - Вакансии: уровень сбора aggressive | moderate (по умолчанию) | specialized; зарплату в запрос к HH не ставь.
-  После сбора — vacancies_screen, затем каждую вакансию оцени 1–5 через application_score.
-  Подборку показывай только из vacancies_ranked, с рангом у каждой строки; свои скрипты для оценки не пиши.
+  После сбора — vacancies_screen, затем оцени вакансии 1–5 пачками до 20 штук через application_score_batch
+  (по одной — application_score). Подборку показывай только из vacancies_ranked, с рангом у каждой строки;
+  свои скрипты для оценки не пиши.
+- Каждый ответ инструмента остаётся в контексте и перечитывается на каждом шаге, это расходует лимит человека.
+  Списки бери страницами: applications_list и vacancies_ranked (limit, offset), полный текст одной вакансии —
+  application_get или vacancy_fetch_full. Не выгружай всю базу и не сохраняй ответы в файлы, чтобы дочитывать.
 - Главные правила работы — инструмент agent_rules: прочитай их в начале сессии и следуй им; при расхождении
   с этим текстом правила agent_rules важнее.
 - Список этапов и шагов — methodology_route. Процедуру текущего этапа читай инструментом stage_procedure
@@ -212,8 +233,9 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
 
     @tool
     def status_report() -> dict:
-        """Текущее состояние поиска: анкета, резюме, факты, воронка с ID, следующие шаги и ограничения."""
-        return report.status(store, cid)
+        """Текущее состояние поиска: анкета, резюме, факты, воронка (счётчики и первые ID), следующие шаги
+        и ограничения. Шаги по вакансиям сгруппированы: count и первые refs; сами карточки — applications_list(state=...)."""
+        return report.status(store, cid, max_ids=STATUS_IDS)
 
     @tool
     def set_pause(paused: bool) -> dict:
@@ -343,6 +365,12 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
 
     # --- stages 14-18, 22: vacancies and applications ---
 
+    def _card(application_id):
+        app = next((a for a in apps.list_applications(store, cid) if a["object_id"] == application_id), None)
+        if app is None:
+            raise DomainError("not_found", f"application {application_id}")
+        return app
+
     @tool
     def vacancy_constraints(application_id: str, policy: dict) -> dict:
         """Этап 15, шаг 4: зарплата, формат и география вакансии против политики кандидата.
@@ -362,15 +390,18 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
         """Этап 15 до оценки: какие найденные вакансии идут на оценку 1–5 при выбранном уровне сбора.
         level: aggressive (без отсева) | moderate (по умолчанию, отсев только явных конфликтов) |
         specialized (строже к зарплате). policy — как в vacancy_constraints. Вакансии без зарплаты, с открытой
-        вилкой («от …») и с зарплатой чуть ниже запроса остаются. Состояние карточек не меняется."""
+        вилкой («от …») и с зарплатой чуть ниже запроса остаются. Состояние карточек не меняется.
+        keep и dropped — первые 50 ID, сколько всего — в counts."""
         items = [{"id": a["object_id"], "vacancy": a["vacancy"]} for a in apps.list_applications(store, cid)
                  if a["state"] in ("found", "needs_full_text")]
-        return checks.screen(items, policy, level)
+        out = checks.screen(items, policy, level)
+        return out | {"keep": out["keep"][:PAGE], "dropped": out["dropped"][:PAGE]}
 
     @tool
-    def vacancies_ranked() -> dict:
-        """Подборка для человека: вакансии с оценкой 1–5 от лучшей к худшей и список ещё не оценённых.
-        Показывай подборку только отсюда; всё из unscored сначала оцени через application_score."""
+    def vacancies_ranked(limit: int = RANKED, offset: int = 0) -> dict:
+        """Подборка для человека: вакансии с оценкой 1–5 от лучшей к худшей (страница limit/offset) и первые
+        limit ещё не оценённых с началом текста. total_ranked и total_unscored — сколько всего.
+        Показывай подборку только отсюда; unscored оценивай пачками через application_score_batch."""
         ranked, unscored = [], []
         for a in apps.list_applications(store, cid):
             if a["state"] == "rejected_policy":
@@ -383,9 +414,11 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
                 ranked.append(row | {"rank": score["final"] or score["preliminary"],
                                      "final": score["final"] is not None, "why": score["why"]})
             else:
-                unscored.append(row)
+                unscored.append(row | {"snippet": (a["vacancy"].get("text") or "")[:SNIPPET]})
         ranked.sort(key=lambda r: (-r["rank"], not r["final"]))
-        return {"ranked": ranked, "unscored": unscored}
+        start, size = max(offset, 0), min(max(limit, 1), 200)
+        return {"ranked": ranked[start:start + size], "total_ranked": len(ranked),
+                "unscored": unscored[:size], "total_unscored": len(unscored)}
 
     @tool
     def vacancies_import(items: list[dict], track_id: str = "main") -> dict:
@@ -409,20 +442,49 @@ def build_server(settings, collector=None, extra_instructions="", library=None, 
         return collector_feed.fetch_full(store, cid, collector, application_id)
 
     @tool
-    def applications_list(state: str | None = None) -> list[dict]:
-        """Карточки откликов, при необходимости с фильтром по состоянию."""
-        return [a for a in apps.list_applications(store, cid) if state is None or a["state"] == state]
+    def applications_list(state: str | None = None, limit: int = PAGE, offset: int = 0) -> list[dict]:
+        """Карточки откликов страницами (limit до 200, offset), при необходимости с фильтром по состоянию.
+        Без текста вакансии: его даёт application_get. Сколько всего — в status_report (funnel.counts)."""
+        cards = [a for a in apps.list_applications(store, cid) if state is None or a["state"] == state]
+        return [_brief(a) for a in cards[max(offset, 0):max(offset, 0) + min(max(limit, 1), 200)]]
+
+    @tool
+    def application_get(application_id: str) -> dict:
+        """Одна карточка отклика целиком, с полным текстом вакансии."""
+        return _card(application_id)
 
     @tool
     def application_score(application_id: str, expected_version: int, preliminary: int, why: str,
                           fact_ids: list[str], final: int | None = None, risks: list[str] | None = None) -> dict:
-        """Оценка 1–5 с объяснением и fact_ids. final допустим только при полном тексте вакансии."""
-        return apps.score(store, cid, application_id, expected_version, preliminary, why, fact_ids, final, risks)
+        """Оценка 1–5 с объяснением и fact_ids. final допустим только при полном тексте вакансии.
+        Несколько вакансий оценивай одним вызовом application_score_batch."""
+        return _short(apps.score(store, cid, application_id, expected_version, preliminary, why, fact_ids, final, risks))
+
+    @tool
+    def application_score_batch(items: list[dict]) -> dict:
+        """Оценить до 20 вакансий за один вызов. items: [{application_id, expected_version, preliminary, why,
+        fact_ids, final?, risks?}] — поля как в application_score. Ошибка одной не мешает остальным:
+        results по порядку, у каждой state и version или error."""
+        if len(items) > BATCH:
+            raise DomainError("invalid_schema", f"items: up to {BATCH} per call")
+        results = []
+        for item in items:
+            try:
+                results.append(_short(apps.score(
+                    store, cid, item["application_id"], item["expected_version"], item["preliminary"], item["why"],
+                    item.get("fact_ids") or [], item.get("final"), item.get("risks"))))
+            except DomainError as exc:
+                results.append({"object_id": item.get("application_id"), "error": f"{exc.code}: {exc}"})
+            except (KeyError, TypeError) as exc:
+                results.append({"object_id": item.get("application_id") if isinstance(item, dict) else None,
+                                "error": f"invalid_schema: {exc}"})
+        return {"results": results}
 
     @tool
     def application_decide(application_id: str, expected_version: int, decision: str, reason: str) -> dict:
         """Решение кандидата: approve | defer | reject. Молчание не согласие."""
-        return apps.decide(store, cid, application_id, expected_version, decision, reason, actor="candidate_via_agent")
+        return _short(apps.decide(store, cid, application_id, expected_version, decision, reason,
+                                  actor="candidate_via_agent"))
 
     @tool
     def application_prepare(application_id: str, expected_version: int, material: dict, channel: str) -> dict:
