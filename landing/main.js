@@ -14,7 +14,6 @@ document.title = document.title.replaceAll(FALLBACK_BRAND, BRAND);
 // Все внешние адреса — только здесь. channel и bot пока заглушки: замените на настоящие ссылки.
 const LINKS = {
   author: "https://t.me/Aleksei_Shturbin",
-  mail: "mailto:alexeyshturbin@gmail.com",
   channel: "#tg-channel-todo",
   bot: "#tg-bot-todo",
 };
