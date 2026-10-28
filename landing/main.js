@@ -246,3 +246,10 @@ document.querySelectorAll(".app").forEach((app) => {
     timer = setTimeout(() => app.classList.remove("is-noted"), 4000);
   });
 });
+
+// Якорные ссылки меню останавливают раздел ровно под шапкой: отступ прокрутки равен её высоте.
+if (siteHeader) {
+  const setHeaderHeight = () => document.documentElement.style.setProperty("--header-h", `${siteHeader.offsetHeight}px`);
+  setHeaderHeight();
+  new ResizeObserver(setHeaderHeight).observe(siteHeader);
+}
