@@ -369,6 +369,15 @@ main:focus { outline: none; }
 /* Agent + people */
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 4vw, 56px); }
 .duo .section-head h2 { font-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.5rem); }
+/* Карточки двух колонок стоят на общих строках: одна линия и одна высота */
+@media (min-width: 901px) {
+  .duo { grid-template-rows: repeat(8, auto); row-gap: 10px; }
+  .duo-col { display: grid; grid-row: 1 / -1; grid-template-rows: subgrid; align-content: start; }
+  .duo-col .cards { grid-row: 2 / span 6; grid-template-rows: subgrid; }
+  .col-people .cards { grid-row: 2 / span 4; }
+  .duo-col .note { grid-row: 8; }
+  .duo-col .cards li { align-content: start; }
+}
 .cards { list-style: none; padding: 0; display: grid; gap: 10px; }
 .cards li { padding: 20px 22px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); display: grid; grid-template-columns: 12px 1fr; gap: 4px 14px; }
 .cards li::before { content: ""; grid-row: span 2; inline-size: 12px; block-size: 12px; border-radius: 4px; margin-block-start: .4em; }
