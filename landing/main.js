@@ -188,6 +188,18 @@ document.querySelectorAll(".copy").forEach((box) => {
   });
 });
 
+// Модальные окна: кнопка с data-dialog открывает окно, клик по фону закрывает.
+document.querySelectorAll("[data-dialog]").forEach((opener) => {
+  const dialog = document.getElementById(opener.dataset.dialog);
+  if (!dialog) return;
+  opener.addEventListener("click", () => dialog.showModal());
+  dialog.addEventListener("click", (event) => {
+    const r = dialog.getBoundingClientRect();
+    const outside = event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
+    if (event.target === dialog && outside) dialog.close();
+  });
+});
+
 // Линия шагов настройки заполняется по мере прокрутки, пройденные шаги становятся зелёными.
 const path = document.querySelector(".path-steps");
 if (path) {

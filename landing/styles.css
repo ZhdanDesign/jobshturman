@@ -439,6 +439,18 @@ main:focus { outline: none; }
 .terminal-body code { flex: 1 1 0; min-inline-size: 0; font-family: var(--mono); font-size: .8125rem; color: #e8f2ec; white-space: nowrap; overflow-x: auto; scrollbar-width: thin; padding-block: 4px; }
 .terminal .copy-btn { flex: none; color: #e8f2ec; background: rgb(255 255 255 / 6%); border-color: rgb(255 255 255 / 22%); }
 .terminal .copy-btn.is-done { color: #33d18b; border-color: #33d18b; }
+.win-check { margin-block-start: 14px; color: var(--muted); }
+.link-btn { padding: 0; border: 0; background: none; font: inherit; color: var(--agent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link-btn:hover { color: var(--ink); }
+.modal { margin: auto; inline-size: min(640px, calc(100% - 32px)); max-block-size: calc(100% - 32px); padding: 28px; border: 0; border-radius: var(--radius); background: var(--bg); color: var(--ink); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 45%); }
+.modal::backdrop { background: rgb(10 20 15 / 45%); backdrop-filter: blur(4px); }
+.modal h2 { margin: 0 32px 12px 0; font-size: 1.375rem; }
+.modal > p { color: var(--muted); }
+.modal-steps { margin-block: 16px; padding-inline-start: 1.25em; display: grid; gap: 8px; }
+.modal .terminal.copy { margin-block: 18px; }
+.modal-close { position: absolute; inset-block-start: 14px; inset-inline-end: 14px; inline-size: 36px; block-size: 36px; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; color: var(--ink); font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.modal-close:hover { border-color: var(--ink); }
+@media (max-width: 600px) { .modal { padding: 22px 18px; } }
 
 /* «Что-то пошло не так?»: помогают люди, поэтому янтарный */
 .help-card { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; margin-block-start: 20px; max-inline-size: 960px; padding: 18px 20px; border-radius: var(--radius); background: var(--people-soft); border: 1px solid color-mix(in srgb, var(--people-solid) 35%, transparent); }
