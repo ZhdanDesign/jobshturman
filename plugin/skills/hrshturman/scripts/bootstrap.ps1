@@ -13,6 +13,10 @@
 # connects it to Claude Code and Codex and copies this skill next to them.
 param([string]$Source = $env:HRS_SOURCE)
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 redraws its progress bar for every downloaded block, which makes downloads
+# many times slower; older Windows does not offer TLS 1.2 by default.
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $SkillDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $FromPlugin = @()
@@ -21,18 +25,20 @@ if ($SkillDir -match '[\\/]\.claude[\\/]plugins[\\/]') { $FromPlugin = @('--from
 function Say($msg) { [Console]::Error.WriteLine("JobShturman: $msg") }
 function Fail($msg) { Say $msg; exit 1 }
 function Run {
-    # Native tools report progress on stderr; only the exit code means failure.
+    # Native tools report progress on stderr; only the exit code means failure. stderr is left as is,
+    # so uv draws its download progress in the console; stdout goes to stderr, keeping ours clean.
     $exe, $rest = $args
     $ErrorActionPreference = 'Continue'
-    & $exe @rest 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
+    & $exe @rest | ForEach-Object { [Console]::Error.WriteLine("$_") }
     if ($LASTEXITCODE -ne 0) { Fail "$exe завершился с кодом $LASTEXITCODE" }
 }
 
 $LocalBin = Join-Path $HOME '.local\bin'
 $env:Path = "$LocalBin;$env:Path"
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-    Say 'ставлю uv (https://astral.sh/uv)'
-    powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://astral.sh/uv/install.ps1 | iex' | Out-Null
+    Say 'ставлю uv, установщик программ на Python (https://astral.sh/uv)'
+    powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://astral.sh/uv/install.ps1 | iex' |
+        ForEach-Object { [Console]::Error.WriteLine("$_") }
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { Fail 'uv не установился' }
 }
 
@@ -40,6 +46,7 @@ function Install-Wheels($dir) {
     if (-not (Get-ChildItem -Path $dir -Filter 'hrshturman-*.whl' -ErrorAction SilentlyContinue)) {
         Fail "в $dir нет hrshturman-*.whl"
     }
+    Say 'ставлю программу: Python 3.12 и библиотеки, около 100 МБ. В первый раз это занимает несколько минут.'
     Run uv tool install --force --python 3.12 --find-links $dir hrshturman
 }
 
@@ -68,7 +75,7 @@ try {
         if ($Source -match '^https?://') {
             Say "скачиваю $Source"
             $zip = Join-Path $Work 'hrs.zip'
-            Invoke-WebRequest -UseBasicParsing -Uri $Source -OutFile $zip
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 300 -Uri $Source -OutFile $zip
             $Source = $zip
         }
         if (Test-Path (Join-Path $Source 'hrs\pyproject.toml')) {
@@ -89,5 +96,6 @@ try {
 }
 
 & uv tool update-shell 2>&1 | Out-Null
+Say 'подключаю программу к Claude Code и Codex'
 & $Hrs setup --skill-dir $SkillDir @FromPlugin
 exit $LASTEXITCODE
