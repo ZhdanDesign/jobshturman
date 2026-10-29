@@ -448,6 +448,9 @@ main:focus { outline: none; }
 .modal > p { color: var(--muted); }
 .modal-steps { margin-block: 16px; padding-inline-start: 1.25em; display: grid; gap: 8px; }
 .modal .terminal.copy { margin-block: 18px; }
+.modal .terminal-body { align-items: flex-start; }
+.modal .terminal-body code { flex-basis: calc(100% - 30px); white-space: normal; overflow-wrap: anywhere; overflow: visible; line-height: 1.6; }
+.modal .terminal .copy-btn { margin-inline-start: 22px; }
 .modal-close { position: absolute; inset-block-start: 14px; inset-inline-end: 14px; inline-size: 36px; block-size: 36px; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; color: var(--ink); font-size: 1.25rem; line-height: 1; cursor: pointer; }
 .modal-close:hover { border-color: var(--ink); }
 @media (max-width: 600px) { .modal { padding: 22px 18px; } }
