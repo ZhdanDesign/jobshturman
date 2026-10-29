@@ -421,6 +421,7 @@ main:focus { outline: none; }
 .install-steps li::before { content: counter(inst); grid-row: span 3; inline-size: 40px; block-size: 40px; border-radius: 50%; display: grid; place-items: center; font: 700 1rem/1 var(--mono); background: var(--you-soft); color: var(--you); }
 .install-steps h3 { font-size: 1.1875rem; font-weight: 700; padding-block-start: 8px; }
 .install-steps p { color: var(--muted); }
+.install-steps .mode-tip { margin-block-start: 6px; padding: 10px 14px; border-radius: 10px; border-inline-start: 3px solid var(--people-solid); background: var(--people-soft); color: var(--ink); }
 .copy { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-block-start: 10px; padding: 10px 10px 10px 14px; border-radius: 12px; background: var(--bg); border: 1.5px dashed var(--line-strong); }
 .copy code { flex: 1 1 220px; font-size: .8125rem; overflow-wrap: anywhere; }
 .copy-btn.is-done { color: var(--agent); border-color: var(--agent); }
