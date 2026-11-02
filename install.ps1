@@ -41,6 +41,7 @@ try {
     }
     powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrap $Source
     if ($LASTEXITCODE -ne 0) { Say 'установка не завершилась. Пришлите в поддержку весь текст из этого окна.' }
+    else { Say 'установка завершена.' }
 } finally {
     Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 }
