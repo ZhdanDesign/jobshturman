@@ -1,6 +1,6 @@
 ﻿# JobShturman: one-line install for Windows (PowerShell).
 #
-#   irm https://raw.githubusercontent.com/ZhdanDesign/jobshturman/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/OpenWiseAI/jobshturman/main/install.ps1 | iex
 #
 # Downloads the latest release (one file with the program and the skill) and runs the skill's
 # installer from it: uv (if missing), the hrs program with its own Python 3.12, then `hrs setup`
@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 # many times slower; older Windows does not offer TLS 1.2 by default.
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-$Repo = 'ZhdanDesign/jobshturman'
+$Repo = 'OpenWiseAI/jobshturman'
 function Say($msg) { [Console]::Error.WriteLine("JobShturman: $msg") }
 $Work = Join-Path ([IO.Path]::GetTempPath()) ("hrs-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $Work | Out-Null
